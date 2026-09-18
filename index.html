@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Tone Boom</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@1,800;1,900&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/index.css">
+</head>
+<body>
+
+<div id="menu-screen">
+  <canvas id="gameMenu"></canvas>
+  <div class="menu-bottom-controls">
+    <button id="fsToggle" class="menu-control-btn">Full screen</button>
+    <button id="audioToggle" class="menu-control-btn audio-toggle-btn">Audio on</button>
+  </div>
+</div>
+
+<div id="cue2" class="cue flip" hidden>
+  <div class="cue-left">
+    <span class="score-p1"><b id="scoreP1_2"><span class="score-lbl">P1</span><span class="score-num">0</span></b></span>
+  </div>
+  <div class="cuecenter">
+    <div class="chips">
+      <canvas id="chipNow2" class="chip" width="76" height="76"></canvas>
+      <canvas id="chipNext2" class="chip next" width="48" height="48"></canvas>
+    </div>
+  </div>
+  <div class="cue-right">
+    <span class="score-p2"><b id="scoreP2_2"><span class="score-lbl">P2</span><span class="score-num">0</span></b></span>
+    <div class="bar-time">
+      <svg class="clock-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/>
+        <polyline points="12 7 12 12 15.5 14"/>
+      </svg>
+      <b id="time2">3:00</b>
+      <span id="countdown2" class="bar-countdown" hidden></span>
+    </div>
+  </div>
+</div>
+
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div id="hud" hidden>
+    <div><span>biggest burst</span><b id="hudBig">0</b></div>
+    <div><span>clusters burst</span><b id="hudGroups">0</b></div>
+    <div><span>balls destroyed</span><b id="hudBalls">0</b></div>
+  </div>
+
+  <div id="pause-overlay" hidden>
+    <div class="pause-card">
+      <div class="pause-icon">
+        <span class="pause-bar"></span>
+        <span class="pause-bar"></span>
+      </div>
+      <div class="pause-title">PAUSED</div>
+      <div class="pause-hint">Tap anywhere to resume</div>
+    </div>
+  </div>
+
+  <div id="menu-confirm-overlay" hidden>
+    <div class="confirm-card">
+      <div class="confirm-title">Exit to Main Menu?</div>
+      <div class="confirm-sub">Current game progress will be lost.</div>
+      <div class="confirm-actions">
+        <button id="menu-confirm-exit" class="confirm-btn primary">Exit</button>
+        <button id="menu-confirm-cancel" class="confirm-btn secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="over" hidden>
+    <div class="overcard flip" id="overcard2" hidden></div>
+    <div class="overcard" id="overcard1"></div>
+  </div>
+  <canvas id="resultsCanvas" hidden></canvas>
+
+  <div id="panel" hidden>
+    <div class="panel-header">
+      <h2>Options &amp; Adjustments</h2>
+      <button id="panel-close" class="panel-close-btn">Back to Menu</button>
+    </div>
+    <h2>Rules</h2>
+    <div class="knob"><label for="specials">black &amp; white</label>
+      <input id="specials" type="range" min="0" max="1" step="1" value="1"><output id="specialsv">on</output></div>
+    <div class="knob"><label for="colours">colours</label>
+      <input id="colours" type="range" min="3" max="6" step="1" value="3"><output id="coloursv">3</output></div>
+    <div class="knob"><label for="labels">ball numbers</label>
+      <input id="labels" type="range" min="0" max="1" step="1" value="0"><output id="labelsv">off</output></div>
+    <div class="knob"><label for="stats">damage panel</label>
+      <input id="stats" type="range" min="0" max="1" step="1" value="0"><output id="statsv">off</output></div>
+    <div class="knob"><label for="match">match</label>
+      <input id="match" type="range" min="60" max="1200" step="30" value="180"><output id="matchv">3:00</output></div>
+    <div class="knob"><label for="size">ball size</label>
+      <input id="size" type="range" min="8" max="26" step="1" value="12"><output id="sizev">12</output></div>
+    <div class="knob"><label for="rain">rain interval</label>
+      <input id="rain" type="range" min="0" max="10" step="0.5" value="0"><output id="rainv">off</output></div>
+    <div class="knob"><label for="shotdecay">repeat hits pay</label>
+      <input id="shotdecay" type="range" min="0.3" max="1" step="0.05" value="0.5"><output id="shotdecayv">&times;0.50</output></div>
+
+    <h2>Motion</h2>
+    <div class="knob"><label for="roll">roll</label>
+      <input id="roll" type="range" min="0.15" max="1" step="0.01" value="0.45"><output id="rollv">7s</output></div>
+    <div class="knob"><label for="bounce">bounce</label>
+      <input id="bounce" type="range" min="0.5" max="1" step="0.01" value="0.94"><output id="bouncev">94%</output></div>
+    <div class="knob"><label for="spin">spin</label>
+      <input id="spin" type="range" min="0" max="1" step="0.05" value="1"><output id="spinv">100%</output></div>
+    <div class="knob"><label for="kick">kick</label>
+      <input id="kick" type="range" min="0.2" max="2.5" step="0.05" value="1"><output id="kickv">1.0&times;</output></div>
+    <div class="knob"><label for="reload">shot every</label>
+      <input id="reload" type="range" min="0" max="8" step="0.5" value="3"><output id="reloadv">3.0s</output></div>
+
+    <h2>Breaking</h2>
+    <div class="knob"><label for="burst">burst at</label>
+      <input id="burst" type="range" min="0.2" max="1" step="0.05" value="0.4"><output id="burstv">40%</output></div>
+    <div class="knob"><label for="maxpower">max throw</label>
+      <input id="maxpower" type="range" min="600" max="2000" step="50" value="1600"><output id="maxpowerv">1600</output></div>
+    <div class="knob"><label for="kickout">breakout / chain</label>
+      <input id="kickout" type="range" min="0.3" max="1.2" step="0.05" value="0.5"><output id="kickoutv">50% /13%</output></div>
+    <div class="knob"><label for="spread">ghost spread</label>
+      <input id="spread" type="range" min="0.5" max="2" step="0.05" value="2"><output id="spreadv">2.00&times;</output></div>
+    <div class="knob"><label for="speedcap">speed cap</label>
+      <input id="speedcap" type="range" min="600" max="3600" step="100" value="3200"><output id="speedcapv">3200 px/s</output></div>
+    <div class="knob"><label for="minburst">min cluster</label>
+      <input id="minburst" type="range" min="1" max="6" step="1" value="2"><output id="minburstv">2+</output></div>
+
+    <h2>Sound</h2>
+    <div class="knob"><label for="scale">scale</label>
+      <select id="scale">
+        <option>Minor pentatonic</option>
+        <option>Major pentatonic</option>
+        <option>Hirajoshi</option>
+        <option>Kumoi</option>
+        <option>Whole tone</option>
+      </select><output></output></div>
+    <div class="knob"><label for="vol">volume</label>
+      <input id="vol" type="range" min="0" max="2" step="0.05" value="0.9"><output id="volv">90%</output></div>
+    <div class="knob"><label for="lock">lock level</label>
+      <input id="lock" type="range" min="0" max="2" step="0.05" value="0.5"><output id="lockv">50%</output></div>
+    <div class="knob"><label for="brk">break level</label>
+      <input id="brk" type="range" min="0" max="2" step="0.05" value="1.7"><output id="brkv">170%</output></div>
+    <div class="knob"><label for="drone">drone</label>
+      <input id="drone" type="range" min="0" max="1" step="0.05" value="1"><output id="dronev">100%</output></div>
+    <div class="knob"><label for="clicks">knocks</label>
+      <input id="clicks" type="range" min="0" max="2" step="0.05" value="0.5"><output id="clicksv">50%</output></div>
+    <div class="knob"><label for="burstvol">burst level</label>
+      <input id="burstvol" type="range" min="0" max="2" step="0.05" value="1"><output id="burstvolv">100%</output></div>
+    <div class="knob"><label for="latency">audio buffer</label>
+      <input id="latency" type="range" min="0" max="0.2" step="0.01" value="0.05"><output id="latencyv">50ms</output></div>
+    <div class="knob"><label for="haptics">haptics</label>
+      <input id="haptics" type="range" min="0" max="1" step="1" value="1"><output id="hapticsv">on</output></div>
+
+    <h2>Sound FX Preview &amp; Testing</h2>
+    <div id="sound-tester-container"></div>
+
+    <h2>Settings</h2>
+    <button id="copy">Copy these settings</button>
+    <textarea id="settings" readonly rows="3" spellcheck="false"></textarea>
+  </div>
+</div>
+
+<div id="cue" class="cue">
+  <div class="cue-left">
+    <span class="score-p1"><b id="scoreP1"><span class="score-lbl">SCORE</span><span class="score-num">0</span></b></span>
+  </div>
+  <div class="cuecenter">
+    <div class="chips">
+      <canvas id="chipNow" class="chip" width="76" height="76"></canvas>
+      <canvas id="chipNext" class="chip next" width="48" height="48"></canvas>
+    </div>
+  </div>
+  <div class="cue-right">
+    <span class="score-p2" id="scoreP2Wrap1" hidden><b id="scoreP2_1"><span class="score-lbl">P2</span><span class="score-num">0</span></b></span>
+    <div class="bar-time">
+      <svg class="clock-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/>
+        <polyline points="12 7 12 12 15.5 14"/>
+      </svg>
+      <b id="time1">3:00</b>
+      <span id="countdown1" class="bar-countdown" hidden></span>
+    </div>
+  </div>
+</div>
+
+<div id="bar">
+  <div class="row">
+    <button id="pause-btn" class="pause-btn">Pause</button>
+    <span class="spacer"></span>
+    <button id="fs">Full screen</button>
+    <button id="sound" aria-pressed="true">Audio on</button>
+    <button id="menu-btn">Back to Menu</button>
+  </div>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

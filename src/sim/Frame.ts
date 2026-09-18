@@ -1,0 +1,156 @@
+/**
+ * One frame of simulation, with no rendering and no DOM.
+ *
+ * This is the authoritative game loop. `main.ts` calls `advanceFrame` and then
+ * draws; the headless harness calls `advanceFrame` and then measures. Neither
+ * one owns a copy of the substep rule, the reload cadence or the rain cadence,
+ * so a change to game feel cannot land in the browser while the simulation
+ * quietly keeps measuring the old behaviour.
+ */
+import { PhysicsConfig } from '../physics/Config';
+import { stepPhysics } from '../physics/CollisionSolver';
+import {
+  Game,
+  isLowBallDensity,
+  spawnRainBall,
+  syncFromCollisionState,
+  throwBall,
+  toCollisionState,
+} from '../game/GameState';
+import { aiAim } from '../game/AI';
+
+/** Frames longer than this are treated as a hitch and replaced by FALLBACK_DT. */
+export const MAX_FRAME_DT = 0.05;
+export const FALLBACK_DT = 1 / 60;
+
+/** Density-based rain interval used when the rain knob is on "auto". */
+export const AUTO_RAIN_INTERVAL = 0.7;
+
+export interface FrameHooks {
+  /** Called once, after `matchOver` is set, when the match clock runs out. */
+  onMatchOver?: (game: Game) => void;
+}
+
+export interface FrameResult {
+  /** The advanced simulation clock; feed it back in on the next frame. */
+  clock: number;
+  /** The dt actually simulated, after hitch clamping. */
+  dt: number;
+  /** Physics substeps taken this frame. */
+  substeps: number;
+  /** True if the match ended on this frame. */
+  matchEnded: boolean;
+  /** True if any launcher fired this frame. */
+  launched: boolean;
+  /**
+   * True if a launcher fired but the ball actually made it onto the field.
+   * A launcher can fire and still not throw when the bay is blocked by
+   * resting balls.
+   */
+  threw: boolean;
+  /** True if a rain ball was requested on this frame. */
+  rained: boolean;
+}
+
+/**
+ * Guard a raw frame delta. A stalled main thread, a backgrounded tab or a
+ * mismatched clock source can all produce a dt that is zero, negative or huge;
+ * a negative dt in particular used to drive the simulation clock backwards and
+ * silently disable every collision cooldown.
+ */
+export function normalizeDt(rawDt: number): number {
+  return !(rawDt > 0) || rawDt > MAX_FRAME_DT ? FALLBACK_DT : rawDt;
+}
+
+/**
+ * Velocity-based substepping: fast groups get finer steps so nothing tunnels
+ * through a ball at high speed. Clamped to 2..8 steps per frame.
+ */
+export function substepCount(game: Game, dt: number): number {
+  let fastest = 0;
+  for (const g of game.groups) fastest = Math.max(fastest, Math.abs(g.vx) + Math.abs(g.vy));
+  return Math.max(2, Math.min(8, Math.ceil((fastest * dt) / (PhysicsConfig.R * 0.3))));
+}
+
+/** The rain interval in force right now, accounting for the "auto" setting. */
+export function effectiveRainInterval(game: Game, width: number, height: number): number {
+  if (game.rainInterval > 0) return game.rainInterval;
+  return isLowBallDensity(game, width, height) ? AUTO_RAIN_INTERVAL : 0;
+}
+
+/**
+ * Advance the whole game by one frame: physics substeps, reload timers, AI aim,
+ * ball rain, turn firing and the match clock.
+ */
+export function advanceFrame(
+  game: Game,
+  rawDt: number,
+  width: number,
+  height: number,
+  clock: number,
+  hooks?: FrameHooks
+): FrameResult {
+  if (game.paused) {
+    return { clock, dt: 0, substeps: 0, matchEnded: false, launched: false, threw: false, rained: false };
+  }
+
+  const dt = normalizeDt(rawDt);
+  const substeps = substepCount(game, dt);
+  const h = dt / substeps;
+
+  const colState = toCollisionState(game);
+  if (!game.matchOver) {
+    for (let i = 0; i < substeps; i++) {
+      clock += h;
+      stepPhysics(colState, h, clock, width, height);
+    }
+  } else {
+    clock += dt;
+  }
+  syncFromCollisionState(game, colState);
+
+  for (const p of game.players) if (p.reload > 0) p.reload = Math.max(0, p.reload - dt);
+
+  if (game.aiOn && !game.matchOver) {
+    aiAim(game.players[1], game.groups, game.balls, width, height, game.twoPlayer);
+  }
+
+  let launched = false;
+  let threw = false;
+  let rained = false;
+
+  if (!game.matchOver) {
+    const rainEvery = effectiveRainInterval(game, width, height);
+    if (rainEvery > 0) {
+      game.rainTimer += dt;
+      if (game.rainTimer >= rainEvery) {
+        game.rainTimer %= rainEvery;
+        spawnRainBall(game, width, height);
+        rained = true;
+      }
+    } else {
+      game.rainTimer = 0;
+    }
+
+    const activePlayers = game.twoPlayer ? game.players : [game.players[0]];
+    for (const p of activePlayers) {
+      if (p.reload <= 0) {
+        launched = true;
+        if (throwBall(p, game, width, height)) threw = true;
+      }
+    }
+  }
+
+  let matchEnded = false;
+  if (game.matchRunning && !game.matchOver && game.matchLen > 0) {
+    game.matchT += dt;
+    if (game.matchT >= game.matchLen) {
+      game.matchOver = true;
+      game.matchRunning = false;
+      matchEnded = true;
+      hooks?.onMatchOver?.(game);
+    }
+  }
+
+  return { clock, dt, substeps, matchEnded, launched, threw, rained };
+}
