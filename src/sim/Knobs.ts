@@ -13,7 +13,8 @@
  */
 import { Game } from '../game/GameState';
 import { PhysicsConfig, chainPercent, recalcThresholds } from '../physics/Config';
-import { COLORS, SHOT_DECAY, SPECIALS, colorOfKind, setColorsCount, setShotDecay, setSpecialsToggle } from '../game/Rules';
+import { inertiaOf } from '../physics/RigidBody';
+import { COLORS, MAX_COLORS, MIN_COLORS, SHOT_DECAY, SPECIALS, colorOfKind, setColorsCount, setShotDecay, setSpecialsToggle } from '../game/Rules';
 import { AudioStore, applyDrone, applyGain, buildScale, setLatencyHint } from '../audio/SynthEngine';
 import { formatClock } from '../game/Clock';
 
@@ -25,31 +26,67 @@ export interface KnobContext {
   height: number;
 }
 
-export interface KnobDef {
-  id: string;
+/** What every knob carries, whatever kind it is. */
+interface KnobCommon {
   /** Which panel section the knob belongs to. */
   group: 'game' | 'physics' | 'chain' | 'audio';
-  kind: 'range' | 'select';
-  min?: number;
-  max?: number;
-  step?: number;
-  options?: string[];
-  default: KnobValue;
   /** Audio knobs need the AudioContext resumed before they mean anything. */
   wakesAudio?: boolean;
   /** True for knobs with no effect on simulation outcomes (visual/audio only). */
   cosmetic?: boolean;
-  apply(value: any, ctx: KnobContext): void;
-  format(value: any, ctx: KnobContext): string;
   read(ctx: KnobContext): KnobValue;
 }
+
+/**
+ * A slider. Its applier and its readout are handed a number, not `any`.
+ *
+ * `apply` and `format` used to take `any`, which was most of the explicit `any`s
+ * left in `src`: a knob could quietly do string arithmetic on its own value and
+ * nothing would say so.
+ */
+export interface RangeKnobSpec extends KnobCommon {
+  kind: 'range';
+  min: number;
+  max: number;
+  step: number;
+  default: number;
+  apply(value: number, ctx: KnobContext): void;
+  format(value: number, ctx: KnobContext): string;
+}
+
+/**
+ * A dropdown, typed by the options it declares.
+ *
+ * `O` is the union of its own option strings, so an applier cannot be handed a
+ * value the knob does not offer, and adding an option to the list is what makes
+ * the applier accept it.
+ */
+export interface SelectKnobSpec<O extends string = string> extends KnobCommon {
+  kind: 'select';
+  options: readonly O[];
+  default: O;
+  apply(value: O, ctx: KnobContext): void;
+  format(value: O, ctx: KnobContext): string;
+}
+
+/** A knob as authored: everything but the `id`, which comes from the key. */
+export type KnobSpec = RangeKnobSpec | SelectKnobSpec;
+
+/** A knob as the registry serves it. */
+export type KnobDef = KnobSpec & { id: string };
+
+/**
+ * The scales the `scale` knob offers.
+ *
+ * The default is the first option: a `<select>` with no `selected` attribute
+ * opens on its first entry, so the two cannot be stated separately.
+ */
+const SCALE_OPTIONS = ['Hirajoshi', 'Minor pentatonic', 'Major pentatonic', 'Kumoi', 'Whole tone'] as const;
+type ScaleOption = (typeof SCALE_OPTIONS)[number];
 
 function pct(v: number): string {
   return Math.round(v * 100) + '%';
 }
-
-/** A knob definition as authored: everything but the `id`, which comes from the key. */
-type KnobSpec = Omit<KnobDef, 'id'>;
 
 const KNOB_SPECS = {
   specials: {
@@ -60,7 +97,7 @@ const KNOB_SPECS = {
   },
 
   colours: {
-    group: 'game', kind: 'range', min: 3, max: 6, step: 1, default: 3,
+    group: 'game', kind: 'range', min: MIN_COLORS, max: MAX_COLORS, step: 1, default: 3,
     apply: (v, { game }) => {
       setColorsCount(v);
       for (const b of game.balls) {
@@ -111,12 +148,9 @@ const KNOB_SPECS = {
     group: 'game', kind: 'range', min: 8, max: 26, step: 1, default: 12,
     apply: (v, { game }) => {
       PhysicsConfig.R = v;
-      for (const g of game.groups) {
-        g.inertia = 0;
-        for (const o of g.offsets) {
-          g.inertia += o.x * o.x + o.y * o.y + (PhysicsConfig.R * PhysicsConfig.R) / 2;
-        }
-      }
+      // Every group's inertia is derived from the ball radius, so it has to be
+      // rebuilt here — through the same function that first computed it.
+      for (const g of game.groups) g.inertia = inertiaOf(g.offsets);
     },
     format: () => String(Math.round(PhysicsConfig.R)),
     read: () => PhysicsConfig.R,
@@ -215,10 +249,8 @@ const KNOB_SPECS = {
   },
 
   scale: {
-    group: 'audio', kind: 'select', default: 'Hirajoshi', wakesAudio: true, cosmetic: true,
-    // The default is the first option: a <select> with no `selected` attribute
-    // opens on its first entry, so the two cannot be stated separately.
-    options: ['Hirajoshi', 'Minor pentatonic', 'Major pentatonic', 'Kumoi', 'Whole tone'],
+    group: 'audio', kind: 'select', default: 'Hirajoshi' as ScaleOption, wakesAudio: true, cosmetic: true,
+    options: SCALE_OPTIONS,
     apply: v => { AudioStore.scaleName = v; AudioStore.scale = buildScale(v); },
     format: () => '',
     read: () => AudioStore.scaleName,
@@ -296,9 +328,29 @@ export type KnobId = keyof typeof KNOB_SPECS;
  * a knob whose id no longer matched the key it was looked up by, and whose
  * `<input>` in index.html then bound to nothing. There is now one spelling.
  */
-export const KNOBS: Record<string, KnobDef> = Object.fromEntries(
-  Object.entries(KNOB_SPECS).map(([id, spec]) => [id, { ...spec, id }])
-);
+export const KNOBS: Record<KnobId, KnobDef> = (() => {
+  const out = {} as Record<KnobId, KnobDef>;
+  for (const id of Object.keys(KNOB_SPECS) as KnobId[]) {
+    out[id] = { ...KNOB_SPECS[id], id };
+  }
+  return out;
+})();
+
+/**
+ * True when a string names a knob, narrowing it so `KNOBS` can be indexed.
+ *
+ * `KNOBS` is keyed by `KnobId` rather than by `string`, so `KNOBS.kickout` is
+ * checked and a misspelling is a compile error. An id arriving from a command
+ * line or a settings paste is only a `string` until it has been through here.
+ */
+export function isKnobId(id: string): id is KnobId {
+  return Object.prototype.hasOwnProperty.call(KNOBS, id);
+}
+
+/** The knob a string names, or `undefined` if it names none. */
+export function knobById(id: string): KnobDef | undefined {
+  return isKnobId(id) ? KNOBS[id] : undefined;
+}
 
 /**
  * The presets, declared once for both consumers.
@@ -425,7 +477,7 @@ export function presetIds(): string[] {
  * back to its default when chaos is picked, or the two presets would bleed into
  * each other in whichever order the player tried them.
  */
-export const PRESET_SPAN: string[] = Object.keys(KNOBS).filter(id =>
+export const PRESET_SPAN: KnobId[] = (Object.keys(KNOBS) as KnobId[]).filter(id =>
   Object.values(PRESETS).some(p => id in p.knobs)
 );
 
@@ -433,7 +485,7 @@ export const PRESET_SPAN: string[] = Object.keys(KNOBS).filter(id =>
 export function presetValue(presetId: string, knobId: string): KnobValue {
   const preset = PRESETS[presetId];
   if (!preset) throw new Error(`Unknown preset "${presetId}". Known presets: ${presetIds().join(', ')}`);
-  const def = KNOBS[knobId];
+  const def = knobById(knobId);
   if (!def) throw new Error(`Unknown knob "${knobId}". Known knobs: ${knobIds().join(', ')}`);
   return knobId in preset.knobs ? preset.knobs[knobId] : def.default;
 }
@@ -464,8 +516,8 @@ export function presetMatching(values: Record<string, KnobValue>): string | null
   return null;
 }
 
-export function knobIds(): string[] {
-  return Object.keys(KNOBS);
+export function knobIds(): KnobId[] {
+  return Object.keys(KNOBS) as KnobId[];
 }
 
 /**
@@ -474,10 +526,10 @@ export function knobIds(): string[] {
  * out-of-range knob measures a game no player can reach.
  */
 export function parseKnobValue(id: string, raw: string): KnobValue {
-  const def = KNOBS[id];
+  const def = knobById(id);
   if (!def) throw new Error(`Unknown knob "${id}". Known knobs: ${knobIds().join(', ')}`);
   if (def.kind === 'select') {
-    if (def.options && !def.options.includes(raw)) {
+    if (!def.options.includes(raw)) {
       throw new Error(`Knob "${id}" must be one of: ${def.options.join(', ')}`);
     }
     return raw;
@@ -488,23 +540,43 @@ export function parseKnobValue(id: string, raw: string): KnobValue {
   // discarded — a run that reported success while ignoring most of its input.
   const v = Number(raw.trim());
   if (raw.trim() === '' || !isFinite(v)) throw new Error(`Knob "${id}" needs a number, got "${raw}"`);
-  if (def.min !== undefined && v < def.min) throw new Error(`Knob "${id}" is below its minimum ${def.min}`);
-  if (def.max !== undefined && v > def.max) throw new Error(`Knob "${id}" is above its maximum ${def.max}`);
+  if (v < def.min) throw new Error(`Knob "${id}" is below its minimum ${def.min}`);
+  if (v > def.max) throw new Error(`Knob "${id}" is above its maximum ${def.max}`);
   return v;
+}
+
+/**
+ * Hand a value to a knob whose kind is not known where the call is written.
+ *
+ * A value arriving from a DOM input, a command line or a preset table is a
+ * `KnobValue`, and a `KnobDef` is a union; the coercion between them has to
+ * happen somewhere. It happens here, once, rather than being hidden by an `any`
+ * on every applier. Both coercions are no-ops in practice — `parseKnobValue`
+ * already returns a number for a range knob and a string for a select — and
+ * doing them in one place is what lets the appliers be typed at all.
+ */
+export function applyKnob(def: KnobDef, value: KnobValue, ctx: KnobContext): void {
+  if (def.kind === 'select') def.apply(String(value), ctx);
+  else def.apply(Number(value), ctx);
+}
+
+/** Format a value for a knob whose kind is not known where the call is written. */
+export function formatKnob(def: KnobDef, value: KnobValue, ctx: KnobContext): string {
+  return def.kind === 'select' ? def.format(String(value), ctx) : def.format(Number(value), ctx);
 }
 
 /** Apply a set of knob values by id. Unknown ids throw rather than pass silently. */
 export function applyKnobs(values: Record<string, KnobValue>, ctx: KnobContext): void {
   for (const [id, value] of Object.entries(values)) {
-    const def = KNOBS[id];
+    const def = knobById(id);
     if (!def) throw new Error(`Unknown knob "${id}". Known knobs: ${knobIds().join(', ')}`);
-    def.apply(value, ctx);
+    applyKnob(def, value, ctx);
   }
 }
 
 /** Apply every knob's documented default — the state a fresh page load produces. */
 export function applyKnobDefaults(ctx: KnobContext): void {
-  for (const def of Object.values(KNOBS)) def.apply(def.default, ctx);
+  for (const def of Object.values(KNOBS)) applyKnob(def, def.default, ctx);
 }
 
 /** Read back the live value of every knob. */

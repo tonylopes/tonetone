@@ -33,7 +33,28 @@ export const BASELINE_SCENARIOS: BaselineScenario[] = [
   { label: 'duel/768x1024/s1', opts: { mode: 'duel', seed: 1, seconds: 60, width: 768, height: 1024 } },
 ];
 
-/** The numbers a baseline records for each scenario. */
+/**
+ * The numbers a baseline records for each scenario.
+ *
+ * Each field is rounded deliberately: the number of places is the tolerance
+ * this fingerprint allows, and changing one changes what the gate accepts.
+ *
+ * There are three maps from a name to a number in this project, and they look
+ * alike enough to invite merging. They should not be merged, and this is the
+ * reason, recorded at all three so it is not rediscovered:
+ *
+ * - **`EXTRACTORS`** (`sim/Harness.ts`) is a **menu** a person picks from for
+ *   `sweep` and `compare`. Full precision; sums the two players together.
+ * - **`digest`** (`sim/Baseline.ts`) is an **exact-reproducibility fingerprint**
+ *   behind `BASELINE_VERSION`. It rounds each field to a chosen number of
+ *   places — that rounding is its tolerance — keeps the players apart, and
+ *   carries the invariant worsts, which nobody sweeps.
+ * - **`cmdRun`'s table** (`scripts/sim.ts`) is a **report for a human**, with
+ *   per-player columns and composite rows like `balls (avg / max / final)`.
+ *
+ * Merging any two makes one of them stop being what it is, and merging anything
+ * into `digest` changes what every refactor in this project is measured against.
+ */
 export function digest(r: RunResult): Record<string, number> {
   return {
     booms: r.killGroups,

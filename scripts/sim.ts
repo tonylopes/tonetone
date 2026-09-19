@@ -20,6 +20,7 @@ import {
   parseKnobValue,
   presetIds,
   presetKnobs,
+  isKnobId,
 } from '../src/sim/Knobs';
 import { TOLERANCE, violations } from '../src/sim/Metrics';
 import { catchUp, compare, estimate } from '../src/sim/Stats';
@@ -231,6 +232,9 @@ function cmdRun(args: Args): number {
     const overrides = Object.entries(opts.knobs || {});
     if (overrides.length) console.log('knobs: ' + overrides.map(([k, v]) => `${k}=${v}`).join(' '));
 
+    // A report for a person, not a metric map: per-player columns, and rows
+    // that combine several fields. See the note on EXTRACTORS in
+    // src/sim/Harness.ts for why this is not folded into it.
     table(
       ['metric', 'p1', 'p2', 'total'],
       [
@@ -281,7 +285,7 @@ function cmdSweep(args: Args): number {
     fail('sweep needs knob=v1,v2,v3 — for example: sweep boom=0.2,0.4,0.6');
   }
   const id = spec.slice(0, spec.indexOf('='));
-  if (!KNOBS[id]) fail(`Unknown knob "${id}". Try: npm run sim -- knobs`);
+  if (!isKnobId(id)) fail(`Unknown knob "${id}". Try: npm run sim -- knobs`);
   // `parseSet` catches this and `cmdSweep` did not, so an out-of-range sweep value
   // exited 1 with a stack trace where the same value via `--set` exited 2 with a
   // one-line usage error.
@@ -513,8 +517,13 @@ function cmdKnobs(args: Args): number {
   if (args.flags.json) {
     console.log(JSON.stringify(
       Object.values(KNOBS).map(k => ({
-        id: k.id, group: k.group, kind: k.kind, min: k.min, max: k.max,
-        step: k.step, default: k.default, options: k.options, cosmetic: !!k.cosmetic,
+        id: k.id, group: k.group, kind: k.kind,
+        min: k.kind === 'range' ? k.min : undefined,
+        max: k.kind === 'range' ? k.max : undefined,
+        step: k.kind === 'range' ? k.step : undefined,
+        default: k.default,
+        options: k.kind === 'select' ? k.options : undefined,
+        cosmetic: !!k.cosmetic,
       })), null, 2));
     return 0;
   }

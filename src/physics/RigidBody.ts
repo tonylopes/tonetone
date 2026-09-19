@@ -9,12 +9,10 @@ export function makeGroup(members: Ball[], vx: number, vy: number): Group {
   cx /= members.length; cy /= members.length;
 
   const offsets: Offset[] = [];
-  let inertia = 0;
   for (const m of members) {
-    const ox = m.x - cx, oy = m.y - cy;
-    offsets.push({ x: ox, y: oy });
-    inertia += ox * ox + oy * oy + (PhysicsConfig.R * PhysicsConfig.R) / 2;
+    offsets.push({ x: m.x - cx, y: m.y - cy });
   }
+  const inertia = inertiaOf(offsets);
 
   return {
     members,
@@ -28,6 +26,21 @@ export function makeGroup(members: Ball[], vx: number, vy: number): Group {
     inertia,
     color: null,
   };
+}
+
+/**
+ * A group's moment of inertia about its centre of mass.
+ *
+ * Each ball contributes its point-mass term plus its own disc inertia `R^2/2`.
+ * The `size` knob has to recompute this whenever the ball radius changes, and
+ * wrote the sum out a second time to do it; the two could then disagree about
+ * what a group's inertia is, which is how hard it is to spin.
+ */
+export function inertiaOf(offsets: Offset[]): number {
+  let inertia = 0;
+  const disc = (PhysicsConfig.R * PhysicsConfig.R) / 2;
+  for (const o of offsets) inertia += o.x * o.x + o.y * o.y + disc;
+  return inertia;
 }
 
 export function syncGroup(g: Group) {

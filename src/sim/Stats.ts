@@ -46,6 +46,21 @@ export interface Estimate {
   verdict: Verdict;
 }
 
+/**
+ * How many standard errors a result must clear before it is called a difference.
+ *
+ * Two is the whole reporting discipline of this project in one number: anything
+ * inside it is "inside the noise" and must be reported that way. It was written
+ * out twice, in `estimate` and in `compare`, so the sweep and the duel could
+ * have come to disagree about what counts as an effect.
+ */
+export const VERDICT_SIGMA = 2;
+
+function verdictOf(value: number, stderr: number): Verdict {
+  const margin = VERDICT_SIGMA * stderr;
+  return value > margin ? 'higher' : value < -margin ? 'lower' : 'inside the noise';
+}
+
 /** Summarise a sample as mean ± standard error, with a noise-aware verdict. */
 export function estimate(xs: number[]): Estimate {
   const m = mean(xs);
@@ -54,7 +69,7 @@ export function estimate(xs: number[]): Estimate {
     mean: m,
     stderr: e,
     n: xs.length,
-    verdict: m > 2 * e ? 'higher' : m < -2 * e ? 'lower' : 'inside the noise',
+    verdict: verdictOf(m, e),
   };
 }
 
@@ -83,7 +98,7 @@ export function compare(a: number[], b: number[]): Comparison {
     b: { mean: mb, stderr: eb, n: b.length },
     delta,
     stderr: se,
-    verdict: delta > 2 * se ? 'higher' : delta < -2 * se ? 'lower' : 'inside the noise',
+    verdict: verdictOf(delta, se),
     relative: ma !== 0 ? delta / Math.abs(ma) : null,
   };
 }

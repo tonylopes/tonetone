@@ -1,6 +1,6 @@
 import { Game } from '../game/GameState';
 import {
-  DEFAULT_PRESET, KNOBS, KnobContext, KnobValue, PRESETS, PRESET_SPAN,
+  DEFAULT_PRESET, KNOBS, KnobContext, KnobValue, PRESETS, PRESET_SPAN, applyKnob, formatKnob,
   presetIds, presetKnobs, presetMatching,
 } from '../sim/Knobs';
 import { initAudio } from '../audio/SynthEngine';
@@ -34,7 +34,7 @@ export function setupSettingsKnobs(
     const def = KNOBS.kickout;
     const el = document.getElementById('kickout') as HTMLInputElement | null;
     const out = document.getElementById('kickoutv');
-    if (el && out) out.textContent = def.format(parseFloat(el.value), ctx());
+    if (el && out) out.textContent = formatKnob(def, parseFloat(el.value), ctx());
   };
 
   // Each knob's applier, by id, so the preset picker can drive the same code path
@@ -50,8 +50,8 @@ export function setupSettingsKnobs(
     const run = () => {
       const raw = el.type === 'range' ? parseFloat(el.value) : el.value;
       liveValues[def.id] = raw;
-      def.apply(raw, ctx());
-      if (out) out.textContent = def.format(raw, ctx());
+      applyKnob(def, raw, ctx());
+      if (out) out.textContent = formatKnob(def, raw, ctx());
       if (def.group === 'chain') refreshChainReadout();
       if (def.group === 'audio' || def.wakesAudio) updateSoundTesterReadouts();
     };

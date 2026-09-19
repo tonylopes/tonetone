@@ -421,6 +421,25 @@ export function runMany(opts: SimOptions, runs: number, firstSeed = 1): RunResul
 /** Pull one number out of each run, for the statistics helpers. */
 export type Extractor = (r: RunResult) => number;
 
+/**
+ * The metrics `sweep` and `compare` can be pointed at, by name.
+ *
+ * There are three maps from a name to a number in this project, and they look
+ * alike enough to invite merging. They should not be merged, and this is the
+ * reason, recorded at all three so it is not rediscovered:
+ *
+ * - **`EXTRACTORS`** (`sim/Harness.ts`) is a **menu** a person picks from for
+ *   `sweep` and `compare`. Full precision; sums the two players together.
+ * - **`digest`** (`sim/Baseline.ts`) is an **exact-reproducibility fingerprint**
+ *   behind `BASELINE_VERSION`. It rounds each field to a chosen number of
+ *   places — that rounding is its tolerance — keeps the players apart, and
+ *   carries the invariant worsts, which nobody sweeps.
+ * - **`cmdRun`'s table** (`scripts/sim.ts`) is a **report for a human**, with
+ *   per-player columns and composite rows like `balls (avg / max / final)`.
+ *
+ * Merging any two makes one of them stop being what it is, and merging anything
+ * into `digest` changes what every refactor in this project is measured against.
+ */
 export const EXTRACTORS: Record<string, Extractor> = {
   score: r => r.players[0].score + r.players[1].score,
   p1score: r => r.players[0].score,

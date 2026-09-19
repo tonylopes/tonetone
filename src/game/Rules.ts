@@ -2,6 +2,21 @@ import { BallOnDeck, Group, LauncherPlayer, SpecialBallType } from '../physics/T
 import { PhysicsConfig } from '../physics/Config';
 import { BALL_COLORS, BLACK_HEX, WHITE_HEX } from '../graphics/Palette';
 
+/**
+ * The fewest colours the game will play with. The first three of `BALL_COLORS`
+ * are chosen to be the best-separated trio, so this is where a match starts.
+ */
+export const MIN_COLORS = 3;
+
+/**
+ * The most colours the game will play with: however many the palette holds.
+ *
+ * Derived rather than written as 6, so adding a ball colour raises the ceiling
+ * in the clamp, the palette fallback and the `colours` knob at once instead of
+ * in whichever of the three someone remembers.
+ */
+export const MAX_COLORS = BALL_COLORS.length;
+
 export const PALETTES: Record<number, number[]> = {
   3: [0, 1, 2],
   4: [0, 1, 2, 3],
@@ -123,7 +138,7 @@ export function boomTierWord(count: number): string {
 }
 
 export function setColorsCount(count: number) {
-  COLORS = Math.max(3, Math.min(6, count));
+  COLORS = Math.max(MIN_COLORS, Math.min(MAX_COLORS, count));
 }
 
 export function setSpecialsToggle(enabled: boolean) {
@@ -131,7 +146,7 @@ export function setSpecialsToggle(enabled: boolean) {
 }
 
 export function colorOfKind(k: number): string {
-  const set = PALETTES[COLORS] || PALETTES[6];
+  const set = PALETTES[COLORS] || PALETTES[MAX_COLORS];
   return BALL_COLORS[set[((k % set.length) + set.length) % set.length]];
 }
 
