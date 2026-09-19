@@ -1,0 +1,356 @@
+import { Ball, Flash, Group, LauncherPlayer, Pop } from '../physics/Types';
+import { PhysicsConfig } from '../physics/Config';
+import { drawFor, randomKind, colorOfKind, BLACK, WHITE } from './Rules';
+import { rebuildGroups } from '../physics/RigidBody';
+import { aimDirOf, launchPointOf, throwSpeedOf } from '../physics/LauncherBays';
+import { playThud } from '../audio/Voices';
+import { CollisionState } from '../physics/CollisionSolver';
+import { stopAllVoices } from '../audio/SynthEngine';
+
+export function makeLauncher(side: number): LauncherPlayer {
+  return {
+    side,
+    aimDeg: 0,
+    strength: 0.55,
+    loaded: null,
+    nextUp: null,
+    then: null,
+    reload: 0,
+    destroyed: 0,
+    bursts: 0,
+    locks: 0,
+    peels: 0,
+    score: 0,
+    best: 0,
+    lockPts: 0,
+    burstPts: 0,
+    peelPts: 0,
+  };
+}
+
+export interface Game {
+  balls: Ball[];
+  groups: Group[];
+  flashes: Flash[];
+  pops: Pop[];
+  byId: Map<number, Ball>;
+  lastHit: Map<string, number>;
+  players: LauncherPlayer[];
+  nextId: number;
+  twoPlayer: boolean;
+  aiOn: boolean;
+  showLabels: boolean;
+  showStats: boolean;
+  matchLen: number;
+  matchT: number;
+  matchRunning: boolean;
+  matchOver: boolean;
+  paused: boolean;
+  reloadTime: number;
+  rainInterval: number;
+  rainTimer: number;
+  killBig: number;
+  killGroups: number;
+  killBalls: number;
+}
+
+export function getRainBallAlpha(rainTime?: number): number {
+  if (rainTime === undefined || rainTime <= 0) return 1.0;
+  const total = 1.0;
+  const elapsed = total - Math.min(total, rainTime);
+  const cycle = (elapsed / total) * Math.PI * 6;
+  const alpha = 0.5 * (1 - Math.cos(cycle));
+  return Math.max(0, Math.min(0.9, alpha));
+}
+
+export function createGame(): Game {
+  const players = [makeLauncher(1), makeLauncher(-1)];
+  return {
+    balls: [],
+    groups: [],
+    flashes: [],
+    pops: [],
+    byId: new Map(),
+    lastHit: new Map(),
+    players,
+    nextId: 1,
+    twoPlayer: false,
+    aiOn: false,
+    showLabels: false,
+    showStats: false,
+    matchLen: 180,
+    matchT: 0,
+    matchRunning: false,
+    matchOver: false,
+    paused: false,
+    reloadTime: 3,
+    rainInterval: 0,
+    rainTimer: 0,
+    killBig: 0,
+    killGroups: 0,
+    killBalls: 0,
+  };
+}
+
+/** Both players are always active in simultaneous mode. */
+export function turnActive(_game: Game, _p: LauncherPlayer): boolean {
+  return true;
+}
+
+/** Reset all reload timers so both launchers can fire immediately at match start. */
+export function startTurns(game: Game) {
+  for (const p of game.players) p.reload = 0;
+}
+
+export function spawnBallCluster(game: Game, width: number, height: number) {
+  const R = PhysicsConfig.R;
+  const spacingX = R * 2.5;
+  const spacingY = spacingX * (Math.sqrt(3) / 2);
+  const rowCounts = [1, 2, 3, 4, 5, 4, 3, 2, 1];
+  const numRows = rowCounts.length;
+  const totalHeight = (numRows - 1) * spacingY;
+  const centerY = height / 2;
+  const topY = centerY - totalHeight / 2;
+  const centerX = width / 2;
+
+  for (let r = 0; r < numRows; r++) {
+    const numBalls = rowCounts[r];
+    const rowWidth = (numBalls - 1) * spacingX;
+    const startX = centerX - rowWidth / 2;
+    const y = topY + r * spacingY;
+
+    for (let i = 0; i < numBalls; i++) {
+      const x = startX + i * spacingX;
+      const kind = randomKind();
+      spawn(game, x, y, 0, 0, { dir: 0, speed: 0, kind, color: colorOfKind(kind), special: null }, width, height);
+    }
+  }
+}
+
+export function resetField(game: Game, width?: number, height?: number) {
+  stopAllVoices();
+  game.balls = [];
+  game.groups = [];
+  game.flashes = [];
+  game.pops = [];
+  game.lastHit.clear();
+  game.byId.clear();
+  game.paused = false;
+  game.rainTimer = 0;
+  game.killBig = 0;
+  game.killGroups = 0;
+  game.killBalls = 0;
+
+  for (const p of game.players) {
+    p.loaded = drawFor(p, game.players, game.twoPlayer);
+    p.nextUp = drawFor(p, game.players, game.twoPlayer);
+    p.then = drawFor(p, game.players, game.twoPlayer);
+    p.reload = 0; p.destroyed = 0; p.bursts = 0;
+    p.locks = 0; p.peels = 0; p.score = 0; p.best = 0;
+    p.lockPts = 0; p.burstPts = 0; p.peelPts = 0;
+  }
+
+  if (width && height) {
+    spawnBallCluster(game, width, height);
+  }
+}
+
+export function isLowBallDensity(game: Game, width: number, height: number, stopThresholdMultiplier = 1.25): boolean {
+  const activeCount = game.balls.filter(b => !b.ghost).length;
+  const area = width * height;
+  const baseThreshold = Math.max(14, Math.round(area / 18000));
+  const targetThreshold = (game as any)._isRaining ? Math.round(baseThreshold * stopThresholdMultiplier) : baseThreshold;
+  const raining = activeCount < targetThreshold;
+  (game as any)._isRaining = raining;
+  return raining;
+}
+
+export function spawnRainBall(game: Game, width: number, height: number): boolean {
+  const R = PhysicsConfig.R;
+  const pad = R + 4;
+  const minX = pad;
+  const maxX = width - pad;
+  const minY = pad;
+  const maxY = height - pad;
+  if (maxX <= minX || maxY <= minY) return false;
+
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const rx = minX + Math.random() * (maxX - minX);
+    const ry = minY + Math.random() * (maxY - minY);
+    if (spawn(game, rx, ry, 90, 240, null, width, height)) {
+      const spawned = game.balls[game.balls.length - 1];
+      if (spawned) spawned.rainTime = 1.0;
+      return true;
+    }
+  }
+  return false;
+}
+
+export function fits(x: number, y: number, allowBay: boolean, game: Game, width: number, height: number): boolean {
+  const R = PhysicsConfig.R;
+  if (x < R || y < R || x > width - R || y > height - R) return false;
+  if (!allowBay) {
+    const keep = R * 2 + R;
+    const activePlayers = game.twoPlayer ? game.players : [game.players[0]];
+    for (const p of activePlayers) {
+      const m = launchPointOf(p, width, height);
+      const bx = x - m.x, by = y - m.y;
+      if (bx * bx + by * by < keep * keep) return false;
+    }
+  }
+  const need = Math.pow(2 * R + 0.5, 2);
+  for (const b of game.balls) {
+    const dx = b.x - x, dy = b.y - y;
+    if (dx * dx + dy * dy < need) return false;
+  }
+  return true;
+}
+
+export function spawn(
+  game: Game,
+  x: number,
+  y: number,
+  lo: number,
+  hi: number,
+  aim: { dir: number; speed: number; kind: number; color: string; special: any; credit?: number } | null,
+  width: number,
+  height: number
+): boolean {
+  if (game.balls.length >= PhysicsConfig.MAX_BALLS) return false;
+  if (!fits(x, y, !!aim, game, width, height)) {
+    game.flashes.push({ x, y, t: 0, kind: 'blocked' });
+    return false;
+  }
+
+  const ball: Ball = {
+    id: game.nextId++,
+    x,
+    y,
+    kind: aim ? aim.kind : randomKind(),
+    special: aim ? aim.special || null : null,
+    color: '',
+    credit: aim && aim.credit !== undefined ? aim.credit : -1,
+    shot: aim && aim.credit !== undefined && aim.credit >= 0 ? { events: 0 } : undefined,
+    bonds: new Set(),
+    group: null as any,
+  };
+  ball.color = ball.special ? (ball.special === 'black' ? BLACK : WHITE) : colorOfKind(ball.kind);
+  if (aim) ball.exempt = 1.6;
+
+  game.balls.push(ball);
+  game.byId.set(ball.id, ball);
+
+  const dir = aim ? aim.dir : Math.random() * Math.PI * 2;
+  const speed = (aim ? aim.speed : (lo + Math.random() * (hi - lo)) * PhysicsConfig.SC) * PhysicsConfig.KICK;
+  // Both rebuilds are load-bearing, however redundant the first one looks: the
+  // new ball has no bonds, so it is always the singleton the fallback below
+  // describes. `rebuildGroups` is not idempotent — it re-derives every group's
+  // velocity by averaging its members', which reintroduces rounding, and scales
+  // `av` by the spin knob each time. Dropping this call moves scores by up to
+  // 47% on a baseline scenario. Leave the pair alone.
+  const g = rebuildGroups(game.balls, game.byId).find(group => group.members.includes(ball)) || {
+    members: [ball],
+    offsets: [{ x: 0, y: 0 }],
+    com: { x, y },
+    ang: 0,
+    av: 0,
+    vx: Math.cos(dir) * speed,
+    vy: Math.sin(dir) * speed,
+    mass: 1,
+    inertia: 1,
+    color: null,
+  };
+
+  g.vx = Math.cos(dir) * speed;
+  g.vy = Math.sin(dir) * speed;
+  ball.group = g;
+  game.groups = rebuildGroups(game.balls, game.byId);
+  game.flashes.push({ x, y, t: 0, kind: 'spawn' });
+  return true;
+}
+
+export function launchSpot(p: LauncherPlayer, dir: number, game: Game, width: number, height: number) {
+  const m = launchPointOf(p, width, height);
+  const R = PhysicsConfig.R;
+  for (let d = 0; d <= R * 6; d += R * 0.4) {
+    const x = m.x + Math.cos(dir) * d, y = m.y + Math.sin(dir) * d;
+    if (fits(x, y, true, game, width, height)) return { x, y };
+  }
+  return null;
+}
+
+export function throwBall(p: LauncherPlayer, game: Game, width: number, height: number): boolean {
+  if (p.reload > 0) return false;
+  if (!p.loaded) p.loaded = drawFor(p, game.players, game.twoPlayer);
+  const isWhite = p.loaded.special === 'white';
+  const dir = aimDirOf(p);
+  const spot = launchSpot(p, dir, game, width, height);
+  if (!spot) {
+    const m = launchPointOf(p, width, height);
+    game.flashes.push({ x: m.x, y: m.y, t: 0, kind: 'blocked' });
+    return false;
+  }
+  const speed = throwSpeedOf(p, game.twoPlayer);
+  const who = game.players.indexOf(p);
+
+  if (
+    !spawn(
+      game,
+      spot.x,
+      spot.y,
+      0,
+      0,
+      {
+        dir,
+        speed,
+        kind: p.loaded.kind,
+        color: p.loaded.color,
+        special: p.loaded.special,
+        credit: who,
+      },
+      width,
+      height
+    )
+  )
+    return false;
+
+  p.loaded = p.nextUp || drawFor(p, game.players, game.twoPlayer);
+  p.nextUp = p.then || drawFor(p, game.players, game.twoPlayer);
+  p.then = drawFor(p, game.players, game.twoPlayer);
+
+  playThud('swoosh', width ? (spot.x / width) * 2 - 1 : 0, speed / (PhysicsConfig.THROW_MAX * 1.4), false, isWhite);
+  p.reload = game.reloadTime;
+
+  if (!game.matchRunning && !game.matchOver) {
+    game.matchRunning = true;
+    game.matchT = 0;
+  }
+  return true;
+}
+
+export function toCollisionState(game: Game): CollisionState {
+  return {
+    balls: game.balls,
+    groups: game.groups,
+    flashes: game.flashes,
+    pops: game.pops,
+    byId: game.byId,
+    lastHit: game.lastHit,
+    players: game.players,
+    nextId: game.nextId,
+    killBig: game.killBig,
+    killGroups: game.killGroups,
+    killBalls: game.killBalls,
+  };
+}
+
+export function syncFromCollisionState(game: Game, state: CollisionState) {
+  game.balls = state.balls;
+  game.groups = state.groups;
+  game.flashes = state.flashes;
+  game.pops = state.pops;
+  game.nextId = state.nextId;
+  game.killBig = state.killBig;
+  game.killGroups = state.killGroups;
+  game.killBalls = state.killBalls;
+}

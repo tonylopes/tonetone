@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Tone Boom</string>
+    <string name="title_activity_main">Tone Boom</string>
+    <string name="package_name">com.toneboom.billiards</string>
+    <string name="custom_url_scheme">com.toneboom.billiards</string>
+</resources>

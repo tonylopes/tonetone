@@ -1,0 +1,273 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  BALL_COLORS,
+  COLORS,
+  SPECIALS,
+  BLACK,
+  WHITE,
+  setColorsCount,
+  setSpecialsToggle,
+  colorOfKind,
+  toneOfKind,
+  kindLabel,
+  drawFor,
+  PAY_LOCK,
+  PAY_BURST,
+  PAY_PEEL,
+  PAY_BLACK,
+  PAY_BLACK_PAIR,
+  SHOT_DECAY,
+  lockPay,
+  burstPay,
+  peelPay,
+  setShotDecay,
+} from '../../src/game/Rules';
+import { LauncherPlayer } from '../../src/physics/Types';
+
+describe('Rules module', () => {
+  beforeEach(() => {
+    setColorsCount(3);
+    setSpecialsToggle(true);
+  });
+
+  describe('setColorsCount & setSpecialsToggle', () => {
+    it('clamps colors count between 3 and 6', () => {
+      setColorsCount(2);
+      expect(COLORS).toBe(3);
+
+      setColorsCount(5);
+      expect(COLORS).toBe(5);
+
+      setColorsCount(10);
+      expect(COLORS).toBe(6);
+    });
+
+    it('toggles specials flag correctly', () => {
+      setSpecialsToggle(false);
+      expect(SPECIALS).toBe(false);
+
+      setSpecialsToggle(true);
+      expect(SPECIALS).toBe(true);
+    });
+  });
+
+  describe('pay table', () => {
+    it('pays a lock per ball joined, growing with the size of the cluster it joins', () => {
+      expect(lockPay(1, 0, 1)).toBe(PAY_LOCK);         // two single balls
+      expect(lockPay(1, 0, 3)).toBe(2 * PAY_LOCK);     // one ball onto a 3-ball cluster
+      expect(lockPay(1, 0, 9)).toBe(5 * PAY_LOCK);     // one ball onto a 9-ball cluster
+      expect(lockPay(2, 0, 5)).toBe(2 * 3 * PAY_LOCK); // two balls onto a 5-ball cluster
+    });
+
+    it('doubles a lock through one black ball and quadruples black on black', () => {
+      expect(PAY_BLACK).toBe(2);
+      expect(PAY_BLACK_PAIR).toBe(4);
+      expect(lockPay(1, 1, 3)).toBe(lockPay(1, 0, 3) * PAY_BLACK);
+      expect(lockPay(1, 2, 3)).toBe(lockPay(1, 0, 3) * PAY_BLACK_PAIR);
+    });
+
+    it('pays a peel more the bigger the cluster, and always less than bursting it', () => {
+      expect(peelPay(1)).toBe(PAY_PEEL);
+      expect(peelPay(3)).toBe(10);
+      expect(peelPay(8)).toBe(23);
+      for (let n = 2; n <= 12; n++) expect(peelPay(n)).toBeLessThan(burstPay(n));
+    });
+
+    it('pays small bursts per ball and larger bursts a growing per-ball bonus', () => {
+      expect(burstPay(2)).toBe(2 * PAY_BURST);
+      expect(burstPay(3)).toBe(3 * PAY_BURST);
+      expect(burstPay(6)).toBe(6 * PAY_BURST * 2);
+      expect(burstPay(6, 0.5)).toBe(6 * PAY_BURST);
+    });
+
+    it('pays more to burst a cluster than it paid to build it', () => {
+      // Building used to pay the whole cluster again on every lock, so an
+      // 8-ball cluster paid 105 to build and only 40 to burst.
+      let build = 0;
+      for (let n = 1; n < 8; n++) build += lockPay(1, 0, n);
+      expect(burstPay(8)).toBeGreaterThan(build);
+    });
+
+    it('clamps shot decay to 0..1', () => {
+      const was = SHOT_DECAY;
+      try {
+        setShotDecay(1.5);
+        expect(SHOT_DECAY).toBe(1);
+        setShotDecay(-1);
+        expect(SHOT_DECAY).toBe(0);
+      } finally {
+        setShotDecay(was);
+      }
+    });
+  });
+
+  describe('colorOfKind', () => {
+    it('returns colors corresponding to palette configuration', () => {
+      setColorsCount(3);
+      expect(colorOfKind(0)).toBe(BALL_COLORS[0]);
+      expect(colorOfKind(1)).toBe(BALL_COLORS[1]);
+      expect(colorOfKind(2)).toBe(BALL_COLORS[2]);
+      // Wrap around
+      expect(colorOfKind(3)).toBe(BALL_COLORS[0]);
+    });
+
+    it('handles negative kinds by wrapping correctly', () => {
+      setColorsCount(3);
+      expect(colorOfKind(-1)).toBe(BALL_COLORS[2]);
+    });
+  });
+
+  describe('toneOfKind', () => {
+    it('calculates tone normalized between 0 and 1', () => {
+      setColorsCount(3); // (COLORS - 1) = 2
+      expect(toneOfKind(0)).toBe(0);
+      expect(toneOfKind(1)).toBe(0.5);
+      expect(toneOfKind(2)).toBe(1.0);
+    });
+
+    it('handles single color case safely', () => {
+      // Force edge case test
+      setColorsCount(1);
+      // setColorsCount clamps to Math.max(3, ...), so COLORS remains 3
+      expect(toneOfKind(0)).toBe(0);
+    });
+  });
+
+  describe('kindLabel', () => {
+    it('returns star icon for kind < 0', () => {
+      expect(kindLabel(-1)).toBe('\u2605');
+    });
+
+    it('returns 1-based string index for valid kinds', () => {
+      setColorsCount(4);
+      expect(kindLabel(0)).toBe('1');
+      expect(kindLabel(1)).toBe('2');
+      expect(kindLabel(2)).toBe('3');
+      expect(kindLabel(3)).toBe('4');
+      expect(kindLabel(4)).toBe('1'); // wrap
+    });
+  });
+
+  describe('drawFor', () => {
+    it('generates a valid regular ball deck item', () => {
+      setSpecialsToggle(false);
+      const ball = drawFor();
+      expect(ball.kind).toBeGreaterThanOrEqual(0);
+      expect(ball.kind).toBeLessThan(COLORS);
+      expect(ball.special).toBeNull();
+      expect(typeof ball.color).toBe('string');
+    });
+
+    it('gives black to the player ahead and white to the player behind', () => {
+      setSpecialsToggle(true);
+      const leader: LauncherPlayer = { side: 1, score: 10 } as any;
+      const trailer: LauncherPlayer = { side: -1, score: 2 } as any;
+      const players = [leader, trailer];
+
+      let blackProduced = 0;
+      let whiteProduced = 0;
+
+      for (let i = 0; i < 2000; i++) {
+        const fromLeader = drawFor(leader, players, true);
+        expect(fromLeader.special).not.toBe('white');
+        if (fromLeader.special === 'black') {
+          blackProduced++;
+          expect(fromLeader.kind).toBe(-1);
+          expect(fromLeader.color).toBe(BLACK);
+        }
+
+        const fromTrailer = drawFor(trailer, players, true);
+        expect(fromTrailer.special).not.toBe('black');
+        if (fromTrailer.special === 'white') {
+          whiteProduced++;
+          expect(fromTrailer.kind).toBe(-1);
+          expect(fromTrailer.color).toBe(WHITE);
+        }
+      }
+
+      expect(blackProduced).toBeGreaterThan(0);
+      expect(whiteProduced).toBeGreaterThan(0);
+      expect(whiteProduced).toBeLessThan(blackProduced);
+    });
+
+    it('draws black for the leading player twice as often as any single colour', () => {
+      setSpecialsToggle(true);
+      const p1: LauncherPlayer = { side: 1, score: 10 } as any;
+      const p2: LauncherPlayer = { side: -1, score: 2 } as any;
+      const players = [p1, p2];
+      const draws = 20000;
+      let black = 0;
+      const perKind = new Array(COLORS).fill(0);
+
+      for (let i = 0; i < draws; i++) {
+        const b = drawFor(p1, players, true);
+        if (b.special === 'black') black++;
+        else perKind[b.kind]++;
+      }
+
+      expect(black / draws).toBeCloseTo(2 / (COLORS + 2), 1);
+      for (const n of perKind) expect(black / n).toBeGreaterThan(1.7);
+      for (const n of perKind) expect(black / n).toBeLessThan(2.3);
+    });
+
+    it('never produces special black/white ball when either player is at score 0 or equal score', () => {
+      setSpecialsToggle(true);
+      const p1: LauncherPlayer = { side: 1, score: 0 } as any;
+      const p2: LauncherPlayer = { side: -1, score: 5 } as any;
+      const players = [p1, p2];
+
+      for (let i = 0; i < 200; i++) {
+        const b1 = drawFor(p1, players, true);
+        const b2 = drawFor(p2, players, true);
+        expect(b1.special).toBeNull();
+        expect(b2.special).toBeNull();
+      }
+    });
+
+    it('safely handles unlisted player in drawFor without throwing TypeError', () => {
+      setSpecialsToggle(true);
+      const p1: LauncherPlayer = { side: 1, score: 10 } as any;
+      const p2: LauncherPlayer = { side: -1, score: 0 } as any;
+      const unlisted: LauncherPlayer = { side: 1, score: 5 } as any;
+
+      expect(() => drawFor(unlisted, [p1, p2], true)).not.toThrow();
+      const ball = drawFor(unlisted, [p1, p2], true);
+      expect(ball).toBeDefined();
+    });
+
+    it('produces both black and white balls for solo player when score > 0', () => {
+      setSpecialsToggle(true);
+      const soloPlayer: LauncherPlayer = { side: 1, score: 10 } as any;
+
+      let blackProduced = 0;
+      let whiteProduced = 0;
+
+      for (let i = 0; i < 3000; i++) {
+        const ball = drawFor(soloPlayer, [soloPlayer], false);
+        if (ball.special === 'black') {
+          blackProduced++;
+          expect(ball.kind).toBe(-1);
+          expect(ball.color).toBe(BLACK);
+        } else if (ball.special === 'white') {
+          whiteProduced++;
+          expect(ball.kind).toBe(-1);
+          expect(ball.color).toBe(WHITE);
+        }
+      }
+
+      expect(blackProduced).toBeGreaterThan(0);
+      expect(whiteProduced).toBeGreaterThan(0);
+      expect(whiteProduced).toBeLessThan(blackProduced);
+    });
+
+    it('does not produce special balls for solo player when score is 0', () => {
+      setSpecialsToggle(true);
+      const soloPlayer: LauncherPlayer = { side: 1, score: 0 } as any;
+
+      for (let i = 0; i < 200; i++) {
+        const ball = drawFor(soloPlayer, [soloPlayer], false);
+        expect(ball.special).toBeNull();
+      }
+    });
+  });
+});
