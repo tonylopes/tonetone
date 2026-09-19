@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { playNote, playSwoosh, playKnock, getBoomProps, boomPitches, playBoom, playCountdownTick, playMagneticElectricSound, BOND_VOICE, SWOOSH_METAL_MODES, boomEchoSpec, getMagnetLockProps, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL, pickGameBoom, playRandomGameBoom, resetAttractBooms, getWhiteBlackBoomVol, boomVolumeRamp, BOOM_VOL_RAMP, WHITE_BLACK_VOL_RAMP, BOOM_TIER_COUNT } from '../../src/audio/Voices';
+import { playNote, playSwoosh, playKnock, getBoomProps, boomPitches, playBoom, playCountdownTick, playMagneticElectricSound, BOND_VOICE, BREAK_VOICE, SWOOSH_METAL_MODES, boomEchoSpec, getMagnetLockProps, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL, pickGameBoom, playRandomGameBoom, resetAttractBooms, getWhiteBlackBoomVol, boomVolumeRamp, BOOM_VOL_RAMP, WHITE_BLACK_VOL_RAMP, BOOM_TIER_COUNT } from '../../src/audio/Voices';
 import { AudioStore, BEAT, SCALES, SCALE_ROOT, buildScale, inKey } from '../../src/audio/SynthEngine';
 import { clickHz, playBinauralClick, resetUiSoundsForTesting, setClickLockMs } from '../../src/audio/UiSounds';
 
@@ -1187,6 +1187,12 @@ describe('Voices module', () => {
         const lifted = [3, 7, 12, 18, 25].map(n => boomPitches(n, true).land);
         lifted.forEach((f, i) => expect(f, name).toBeGreaterThan(lands[i]));
       }
+    });
+
+    it('plays the lock, peel and knock on the same root as everything else', () => {
+      // A multiplier that is not a whole number of octaves transposes the whole
+      // voice: the bond's ×2.5 played every scale from C#.
+      for (const mul of [BOND_VOICE.mul, BREAK_VOICE.mul]) expect(Number.isInteger(Math.log2(mul)), String(mul)).toBe(true);
     });
 
     it('keeps cancel, select and confirm distinct and rising in every scale', () => {

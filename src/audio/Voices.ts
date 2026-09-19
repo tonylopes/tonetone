@@ -6,8 +6,14 @@ export const BREAK_VOICE = {
   partials: [[1, 1], [2, 0.34]] as [number, number][], open: 2600, close: 700, dry: 0.62
 };
 
+/**
+ * `mul` must be a whole number of octaves (1, 2, 4), or the voice plays the scale
+ * from a different root than everything else. The bond was ×2.5 — an octave and
+ * a flat major third — so locks and knocks played the scale from C# over a drone,
+ * booms and breaks on A.
+ */
 export const BOND_VOICE = {
-  mul: 2.5, dur: 0.32, jitter: 0.18, peak: 0.22, attack: 0.004, tick: 0.26,
+  mul: 2, dur: 0.32, jitter: 0.18, peak: 0.22, attack: 0.004, tick: 0.26,
   partials: [[1, 1], [2, 0.42]] as [number, number][], open: 3400, close: 1000, dry: 0.62
 };
 

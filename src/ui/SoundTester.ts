@@ -1,6 +1,31 @@
 import { AudioStore, BEAT, initAudio, applyGain, inKey } from '../audio/SynthEngine';
-import { playNote, playSwoosh, playKnock, playCountdownTick, getBoomProps, boomPitches, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
+import { BOND_VOICE, playNote, playSwoosh, playKnock, playCountdownTick, getBoomProps, boomPitches, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
 import { clickHz, playBinauralClick } from '../audio/UiSounds';
+import { pitchOf } from '../audio/SoundEvents';
+import { relOfDegree } from '../audio/Voices';
+import { COLORS } from '../game/Rules';
+
+/** Milliseconds between the notes of a tester run. */
+const RUN_GAP_MS = 170;
+
+/**
+ * Play `fn` once for each ball colour in play, a beat apart.
+ *
+ * One note cannot show a scale. These cards used to play a single fixed position
+ * that landed on the root or on E, notes nearly every scale in the picker
+ * shares, so they sounded the same whichever scale was picked.
+ */
+function acrossColours(fn: (kind: number) => void) {
+  for (let k = 0; k < COLORS; k++) setTimeout(() => fn(k), k * RUN_GAP_MS);
+}
+
+/** The scale picked in the panel, as a rising run of bond notes: its five steps and the octave. */
+export function previewScale() {
+  initAudio();
+  for (let d = 0; d <= 5; d++) {
+    setTimeout(() => playNote(relOfDegree(d), 0, 'bond', { boost: 1.0, ignoreOptionsGuard: true }), d * RUN_GAP_MS);
+  }
+}
 
 export interface SoundDef {
   id: string;
@@ -78,10 +103,10 @@ export const SOUND_CATALOG: SoundDef[] = [
     name: 'Bond Lock',
     category: 'Game FX',
     situation: 'Two balls of matching type collide and form a permanent energy bond line',
-    getParamsText: () => `Voice: BOND_VOICE (2.5× Pitch) | Vol: lockVol (${Math.round(AudioStore.lockVol * 100)}%) | Master: ${Math.round(AudioStore.volume * 100)}%`,
+    getParamsText: () => `Voice: BOND_VOICE (${BOND_VOICE.mul}× Pitch) | Vol: lockVol (${Math.round(AudioStore.lockVol * 100)}%) | Master: ${Math.round(AudioStore.volume * 100)}%`,
     play: () => {
       initAudio();
-      playNote(0.3, 0, 'bond', { boost: 1.0, ignoreOptionsGuard: true });
+      acrossColours(k => playNote(pitchOf(k), 0, 'bond', { boost: 1.0, ignoreOptionsGuard: true }));
     }
   },
   {
@@ -103,7 +128,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `Voice: BREAK_VOICE (1.0× Pitch, 0.42s) | Vol: breakVol (${Math.round(AudioStore.breakVol * 100)}%) | Master: ${Math.round(AudioStore.volume * 100)}%`,
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'break', { boost: 1.0, ignoreOptionsGuard: true });
+      acrossColours(k => playNote(pitchOf(k), 0, 'break', { boost: 1.0, ignoreOptionsGuard: true }));
     }
   },
   {
@@ -189,7 +214,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `Tuned Wood Bar: each ball's colour note, 1 octave above its lock (modes × 1, 3, 6) + Noise Click | Dur: 0.12s | Vol: knocks (${Math.round(AudioStore.clickVol * 100)}%)`,
     play: () => {
       initAudio();
-      playKnock(0, 0.6, 0, 2 / 6, { ignoreOptionsGuard: true });
+      playKnock(0, 0.6, pitchOf(0), pitchOf(1), { ignoreOptionsGuard: true });
     }
   },
   {

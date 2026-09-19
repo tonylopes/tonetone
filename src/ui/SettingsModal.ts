@@ -11,7 +11,7 @@ import { initAudio } from '../audio/SynthEngine';
  * `<output>` labels, and waking the AudioContext. What a knob actually *does*
  * lives in the registry, which the simulation harness drives by the same names.
  */
-import { renderSoundTester, updateSoundTesterReadouts } from './SoundTester';
+import { previewScale, renderSoundTester, updateSoundTesterReadouts } from './SoundTester';
 
 export function setupSettingsKnobs(
   getGame: () => Game,
@@ -61,6 +61,9 @@ export function setupSettingsKnobs(
       if (def.wakesAudio) initAudio();
       run();
       reportPresetState();
+      // Picking a scale changes pitches by a semitone or two, too little to hear
+      // on the next random sound; play the scale itself so the pick is heard.
+      if (def.id === 'scale') previewScale();
     });
     run();
   }
