@@ -13,8 +13,7 @@
  * scheduling look-ahead the voices already use.
  */
 import { SoundEvent } from '../physics/Types';
-import { BALL_COLORS } from '../graphics/Palette';
-import { playBoom, playNote, playKnock, playMagneticElectricSound } from './Voices';
+import { playBoom, playNote, playKnock, playMagneticElectricSound, relOfDegree } from './Voices';
 
 /** The knock force that maps to full loudness. Harder hits are clamped to it. */
 export const KNOCK_FULL_SCALE_FORCE = 380;
@@ -33,13 +32,27 @@ export function panOf(x: number, width: number): number {
 }
 
 /**
- * A ball kind to the 0..1 position in the scale its note is drawn from.
+ * The scale step each ball colour plays, indexed by kind: 0-4 are the five steps
+ * of the scale, 5 is the root an octave up.
  *
- * Special balls (a negative kind) sit in the middle. The divisor is the number of
- * ball colours, so adding a colour does not silently retune the scale.
+ * The first three colours — all a default match uses — take steps 1, 3 and 5,
+ * because those are where the scales differ. Colours used to take steps 1, 2 and
+ * 4 of each octave, which every pentatonic in the picker shares: Hirajoshi, Major
+ * pentatonic and Kumoi played identical notes, and Minor pentatonic and Whole
+ * tone differed from them by one. Picking a scale did nothing audible.
+ *
+ * A colour's step does not depend on how many colours are in play, so adding a
+ * colour never retunes the ones already on the table.
+ */
+export const KIND_DEGREES: readonly number[] = [0, 2, 4, 1, 3, 5];
+
+/**
+ * A ball kind to the 0..1 position in the scale its note is drawn from.
+ * Special balls (a negative kind) sit in the middle.
  */
 export function pitchOf(kind: number): number {
-  return kind < 0 ? 0.5 : kind / BALL_COLORS.length;
+  if (kind < 0) return 0.5;
+  return relOfDegree(KIND_DEGREES[kind % KIND_DEGREES.length]);
 }
 
 /** Play every sound the frame recorded, then empty the list. */

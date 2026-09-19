@@ -992,9 +992,15 @@ export function playMagneticElectricSound(xNorm: number = 0, opts: MagnetLockOpt
   });
 }
 
-function scaleDegree(rel: number): number {
+/** A 0..1 position to an index into the ten-note `AudioStore.scale`. */
+export function scaleDegree(rel: number): number {
   const validRel = isNaN(rel) ? 0.5 : rel;
   return Math.max(0, Math.min(9, Math.floor(validRel * 10)));
+}
+
+/** The position `scaleDegree` maps back to `degree`: the middle of its slot. */
+export function relOfDegree(degree: number): number {
+  return (degree + 0.5) / 10;
 }
 
 /**
