@@ -8,15 +8,56 @@ export const SCALES: Record<string, number[]> = {
   'Whole tone': [0, 2, 4, 6, 8],
 };
 
+/** A2, the root every scale is built on, and the drone's pitch. */
+export const SCALE_ROOT = 110;
+
 export function buildScale(name: string): number[] {
   const steps = SCALES[name] || SCALES['Minor pentatonic'];
-  const out: number[] = [];;
+  const out: number[] = [];
   for (let oct = 0; oct < 2; oct++) {
     for (const st of steps) {
-      out.push(110 * Math.pow(2, (st + 12 * oct) / 12));
+      out.push(SCALE_ROOT * Math.pow(2, (st + 12 * oct) / 12));
     }
   }
   return out;
+}
+
+/** Semitones above the root of each step of the scale picked in the panel. */
+function currentSteps(): number[] {
+  return SCALES[AudioStore.scaleName] || SCALES['Minor pentatonic'];
+}
+
+/**
+ * The note of the current scale nearest `freq`, in whatever octave `freq` is in.
+ *
+ * This is how a voice with its own register follows the scale picker: each pitch
+ * it aims at moves onto the nearest scale note, which is never more than a
+ * couple of semitones away, so the voice keeps its character. Nearness is
+ * measured in semitones, not Hz; a tie goes to the lower note.
+ */
+export function inKey(freq: number): number {
+  const steps = currentSteps();
+  const semis = 12 * Math.log2(freq / SCALE_ROOT);
+  const octave = Math.floor(semis / 12);
+  const within = semis - 12 * octave;
+  let best = 0, gap = Infinity;
+  for (const st of [...steps, 12]) {
+    if (Math.abs(within - st) < gap) { gap = Math.abs(within - st); best = st; }
+  }
+  return SCALE_ROOT * Math.pow(2, (12 * octave + best) / 12);
+}
+
+/**
+ * The note `degree` steps of the current scale above the root, A2; a negative
+ * degree counts down. Used where several pitches must stay distinct and in
+ * order whatever the scale — the boom tiers, the UI clicks — since snapping each
+ * one with `inKey` could land two of them on the same note.
+ */
+export function scaleNote(degree: number): number {
+  const steps = currentSteps();
+  const octave = Math.floor(degree / steps.length);
+  const st = steps[degree - octave * steps.length];
+  return SCALE_ROOT * Math.pow(2, (12 * octave + st) / 12);
 }
 
 export interface AudioState {

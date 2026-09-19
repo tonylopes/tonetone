@@ -1,6 +1,6 @@
 import { AudioStore, isOptionsOpen } from '../../audio/SynthEngine';
 import { playNote, playRandomGameBoom } from '../../audio/Voices';
-import { initMenuAudio, playBinauralClick } from '../../audio/UiSounds';
+import { clickHz, initMenuAudio, playBinauralClick } from '../../audio/UiSounds';
 import { pitchOf } from '../../audio/SoundEvents';
 import { Flash, FLASH_LIFE, POP_LIFE, Pop } from '../../physics/Types';
 import { CURRENTS, FLASH_SPECS, MENU_RING, drawRippleRing, ringFade, ringRadius } from '../../graphics/VisualFX';
@@ -212,7 +212,7 @@ function spawnMenuFlash(
   if (!AudioStore.soundOn) return;
   const normX = width > 0 ? (x / width) * 2 - 1 : 0;
   if (k === 'blocked') {
-    playBinauralClick(261.63, 0.2, normX, 'hover');
+    playBinauralClick(clickHz('cancel'), 0.2, normX, 'hover');
     return;
   }
   initMenuAudio();

@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { playNote, playSwoosh, playKnock, getBoomProps, playBoom, playMagneticElectricSound, BOND_VOICE, SWOOSH_METAL_MODES, boomEchoSpec, getMagnetLockProps, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL, pickGameBoom, playRandomGameBoom, resetAttractBooms, getWhiteBlackBoomVol, boomVolumeRamp, BOOM_VOL_RAMP, WHITE_BLACK_VOL_RAMP, BOOM_TIER_COUNT } from '../../src/audio/Voices';
-import { AudioStore, BEAT } from '../../src/audio/SynthEngine';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { playNote, playSwoosh, playKnock, getBoomProps, boomPitches, playBoom, playCountdownTick, playMagneticElectricSound, BOND_VOICE, SWOOSH_METAL_MODES, boomEchoSpec, getMagnetLockProps, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL, pickGameBoom, playRandomGameBoom, resetAttractBooms, getWhiteBlackBoomVol, boomVolumeRamp, BOOM_VOL_RAMP, WHITE_BLACK_VOL_RAMP, BOOM_TIER_COUNT } from '../../src/audio/Voices';
+import { AudioStore, BEAT, SCALES, SCALE_ROOT, buildScale, inKey } from '../../src/audio/SynthEngine';
+import { clickHz, playBinauralClick, resetUiSoundsForTesting, setClickLockMs } from '../../src/audio/UiSounds';
 
 describe('Voices module', () => {
   beforeEach(() => {
@@ -620,7 +621,7 @@ describe('Voices module', () => {
       const single = arcFrequencies(false);
       const pair = arcFrequencies(true);
       // The FM carrier: the loudest, most identifiable part of the lock.
-      const carrier = single.indexOf(2400);
+      const carrier = single.indexOf(inKey(2400));
       expect(carrier).toBeGreaterThanOrEqual(0);
       expect(pair[carrier] / single[carrier]).toBeCloseTo(PAIR_LIFT, 5);
     });
@@ -676,15 +677,16 @@ describe('Voices module', () => {
     it('dives from a higher pitch than the ordinary boom of the same chain size', () => {
       const plain = boom(false);
       const lifted = boom(true);
-      const tone = getBoomProps(7).tone;
+      const plainDive = boomPitches(7), liftedDive = boomPitches(7, true);
 
-      // The binaural pair starts at tone × 3.4, offset ±BEAT/2. Name that pair
-      // exactly: the lifted boom's ring sits far above it and would otherwise
-      // satisfy a loose "something got higher" check on its own.
-      expect(plain.starts).toContain(tone * 3.4 + 2.5);
-      expect(plain.starts).toContain(tone * 3.4 - 2.5);
-      expect(lifted.starts).toContain(tone * 1.8 * 3.4 + 2.5);
-      expect(lifted.starts).toContain(tone * 1.8 * 3.4 - 2.5);
+      // The binaural pair starts at the dive's start, offset ±BEAT/2. Name that
+      // pair exactly: the lifted boom's ring sits far above it and would
+      // otherwise satisfy a loose "something got higher" check on its own.
+      expect(plain.starts).toContain(plainDive.start + 2.5);
+      expect(plain.starts).toContain(plainDive.start - 2.5);
+      expect(lifted.starts).toContain(liftedDive.start + 2.5);
+      expect(lifted.starts).toContain(liftedDive.start - 2.5);
+      expect(liftedDive.start).toBeGreaterThan(plainDive.start);
     });
 
     it('layers a struck-metal ring the ordinary boom does not have', () => {
@@ -695,8 +697,7 @@ describe('Voices module', () => {
 
     it('leaves the ordinary boom with nothing above its own dive', () => {
       const plain = boom(false);
-      const tone = getBoomProps(7).tone;
-      expect(Math.max(...plain.starts)).toBeCloseTo(tone * 3.4 + 2.5, 4);
+      expect(Math.max(...plain.starts)).toBeCloseTo(boomPitches(7).start + 2.5, 4);
     });
   });
   describe('boom echo', () => {
@@ -1064,6 +1065,136 @@ describe('Voices module', () => {
       (mockCtx as any).currentTime = 30;
       playRandomGameBoom(0, 'celebration', { ignoreOptionsGuard: true });
       expect(booms).toBe(4);
+    });
+  });
+
+  describe('every voice follows the scale picked in the panel', () => {
+    const SCALE_NAMES = Object.keys(SCALES);
+    const saved = { name: AudioStore.scaleName, scale: AudioStore.scale };
+    function useScale(name: string) {
+      AudioStore.scaleName = name;
+      AudioStore.scale = buildScale(name);
+    }
+    afterEach(() => { AudioStore.scaleName = saved.name; AudioStore.scale = saved.scale; });
+
+    /** Semitones from the nearest note of the current scale, in any octave. */
+    function offKey(f: number): number {
+      const steps = [...SCALES[AudioStore.scaleName], 12];
+      const semis = 12 * Math.log2(f / SCALE_ROOT);
+      const within = semis - 12 * Math.floor(semis / 12);
+      return Math.min(...steps.map(st => Math.abs(within - st)));
+    }
+    /** In key, allowing for the ±BEAT/2 offset of a binaural pair. */
+    function inTune(f: number): boolean {
+      return [f, f - BEAT / 2, f + BEAT / 2].some(g => g > 0 && offKey(g) < 1e-6);
+    }
+
+    /**
+     * Play `fn` against a fake context and return every frequency any oscillator
+     * was set to or ramped to. Filters and noise are timbre, not notes, and are
+     * not recorded.
+     */
+    function oscillatorPitches(fn: () => void): number[] {
+      const out: number[] = [];
+      const param = (record: boolean) => ({
+        value: 0,
+        setValueAtTime: (v: number) => { if (record) out.push(v); },
+        linearRampToValueAtTime: (v: number) => { if (record) out.push(v); },
+        exponentialRampToValueAtTime: (v: number) => { if (record) out.push(v); },
+        setTargetAtTime: () => {},
+        cancelScheduledValues: () => {},
+      });
+      const node = (osc: boolean): any => new Proxy({}, {
+        get(target: any, key: string) {
+          if (key in target) return target[key];
+          if (['connect', 'disconnect', 'start', 'stop'].includes(key)) return () => {};
+          if (key === 'onended' || key === 'buffer' || key === 'type') return undefined;
+          target[key] = param(osc && key === 'frequency');
+          return target[key];
+        },
+        set(target: any, key: string, v: any) { target[key] = v; return true; },
+      });
+      const ctx: any = new Proxy({ currentTime: 0, sampleRate: 48000, state: 'running' }, {
+        get(target: any, key: string) {
+          if (key in target) return target[key];
+          if (key === 'createOscillator') return () => node(true);
+          if (key.startsWith('create')) return () => node(false);
+          return undefined;
+        },
+      });
+      Object.assign(AudioStore, {
+        actx: ctx, master: node(false), wetBus: node(false), noiseBuf: {},
+        activeVoices: 0, thuds: 0, swooshAt: -9, soundOn: true,
+      });
+      fn();
+      return out;
+    }
+
+    const VOICES: Record<string, () => void> = {
+      'boom (every tier)': () => { for (const n of [3, 7, 12, 18, 25]) playBoom(n, 0, { ignoreOptionsGuard: true }); },
+      'launch swoosh': () => playSwoosh(0, 0.8, { ignoreOptionsGuard: true }),
+      'white ball swoosh': () => playSwoosh(0, 0.8, { ignoreOptionsGuard: true, isWhite: true }),
+      'countdown tick': () => { playCountdownTick({ ignoreOptionsGuard: true }); playCountdownTick({ isGo: true, ignoreOptionsGuard: true }); },
+      'UI clicks': () => {
+        setClickLockMs(0);
+        for (const n of ['cancel', 'select', 'confirm'] as const) {
+          resetUiSoundsForTesting(); setClickLockMs(0);
+          playBinauralClick(clickHz(n), 0.16, 0, 'toggle', 1, true);
+        }
+        resetUiSoundsForTesting();
+      },
+    };
+
+    for (const [voice, play] of Object.entries(VOICES)) {
+      it(`plays only scale notes: ${voice}`, () => {
+        for (const name of SCALE_NAMES) {
+          useScale(name);
+          const pitches = oscillatorPitches(play);
+          expect(pitches.length, `${voice} in ${name}`).toBeGreaterThan(0);
+          for (const f of pitches) expect(inTune(f), `${voice} in ${name}: ${f.toFixed(2)} Hz`).toBe(true);
+        }
+      });
+
+      it(`changes when the scale does: ${voice}`, () => {
+        useScale('Hirajoshi');
+        const a = oscillatorPitches(play);
+        useScale('Minor pentatonic');
+        const b = oscillatorPitches(play);
+        expect(a).not.toEqual(b);
+      });
+    }
+
+    it('lands the black magnet lock on scale notes, single and pair', () => {
+      for (const name of SCALE_NAMES) {
+        useScale(name);
+        for (const isPair of [false, true]) {
+          const pitches = oscillatorPitches(() => playMagneticElectricSound(0, { ignoreOptionsGuard: true, isPair }));
+          const lift = isPair ? PAIR_LIFT : 1, subLift = isPair ? PAIR_SUB_LIFT : 1;
+          // The FM modulator shapes the arc's timbre and is not a note; the
+          // carrier and the suction sub are.
+          for (const f of [2400 * lift, 450 * lift, 130 * subLift, 320 * subLift, 90 * subLift]) {
+            expect(pitches).toContain(inKey(f));
+          }
+        }
+      }
+    });
+
+    it('keeps the boom tiers distinct and rising in every scale', () => {
+      for (const name of SCALE_NAMES) {
+        useScale(name);
+        const lands = [3, 7, 12, 18, 25].map(n => boomPitches(n).land);
+        for (let i = 1; i < lands.length; i++) expect(lands[i], name).toBeGreaterThan(lands[i - 1]);
+        const lifted = [3, 7, 12, 18, 25].map(n => boomPitches(n, true).land);
+        lifted.forEach((f, i) => expect(f, name).toBeGreaterThan(lands[i]));
+      }
+    });
+
+    it('keeps cancel, select and confirm distinct and rising in every scale', () => {
+      for (const name of SCALE_NAMES) {
+        useScale(name);
+        expect(clickHz('select'), name).toBeGreaterThan(clickHz('cancel'));
+        expect(clickHz('confirm'), name).toBeGreaterThan(clickHz('select'));
+      }
     });
   });
 });

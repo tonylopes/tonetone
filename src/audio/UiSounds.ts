@@ -1,4 +1,4 @@
-import { AudioStore, BEAT, SILENCE, initAudio, isOptionsOpen } from './SynthEngine';
+import { AudioStore, BEAT, SILENCE, initAudio, isOptionsOpen, scaleNote } from './SynthEngine';
 
 /**
  * The interface's own voice: the binaural click every button makes.
@@ -12,12 +12,22 @@ import { AudioStore, BEAT, SILENCE, initAudio, isOptionsOpen } from './SynthEngi
  * frequencies at fifteen call sites.
  */
 
-/** A rounded E4 — confirm, unpause, start. */
-export const CLICK_CONFIRM_HZ = 330;
-/** C4 — cancel, close, pause. */
-export const CLICK_CANCEL_HZ = 261.63;
-/** D4 — choosing an item on the menu. */
-export const CLICK_SELECT_HZ = 293.66;
+/**
+ * The scale step each click plays, counted from A2 (see `scaleNote`): three in a
+ * row, so they rise cancel → select → confirm in every scale. They were fixed at
+ * C4, D4 and E4, which put select outside Hirajoshi, the default scale.
+ *
+ * - `confirm` — confirm, unpause, start. E4 in most scales.
+ * - `cancel` — cancel, close, pause.
+ * - `select` — choosing an item on the menu.
+ */
+const CLICK_STEPS = { cancel: 6, select: 7, confirm: 8 } as const;
+export type ClickNote = keyof typeof CLICK_STEPS;
+
+/** The frequency a click plays in the scale picked in the panel. */
+export function clickHz(note: ClickNote): number {
+  return scaleNote(CLICK_STEPS[note]);
+}
 
 const CLICK_SECONDS = 0.16;
 
@@ -91,7 +101,7 @@ function getAudioCtx(): AudioContext | null {
 /** The click a UI control makes: `confirm` affirms, `cancel` dismisses. */
 export function uiClick(kind: 'confirm' | 'cancel') {
   initMenuAudio();
-  playBinauralClick(kind === 'confirm' ? CLICK_CONFIRM_HZ : CLICK_CANCEL_HZ, CLICK_SECONDS, 0, 'toggle');
+  playBinauralClick(clickHz(kind), CLICK_SECONDS, 0, 'toggle');
 }
 
 /**
@@ -99,7 +109,7 @@ export function uiClick(kind: 'confirm' | 'cancel') {
  * sub-harmonic resonance, lowpass smoothing, and interaural Haas spatial delay.
  */
 export function playBinauralClick(
-  freq: number = CLICK_CANCEL_HZ,
+  freq: number = clickHz('cancel'),
   duration: number = CLICK_SECONDS,
   xNorm: number = 0,
   clickType: 'select' | 'hover' | 'toggle' = 'select',
@@ -125,9 +135,9 @@ export function playBinauralClick(
 
     let targetFreq = freq;
     if (clickType === 'select') {
-      targetFreq = Math.min(freq, CLICK_SELECT_HZ);
+      targetFreq = Math.min(freq, clickHz('select'));
     } else if (clickType === 'hover') {
-      targetFreq = Math.min(freq, CLICK_CANCEL_HZ);
+      targetFreq = Math.min(freq, clickHz('cancel'));
     }
 
     const baseVol = (clickType === 'hover' ? 0.06 : clickType === 'toggle' ? 0.22 : 0.30) * volBoost;

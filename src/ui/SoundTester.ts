@@ -1,6 +1,6 @@
-import { AudioStore, BEAT, initAudio, applyGain } from '../audio/SynthEngine';
-import { playNote, playSwoosh, playKnock, playCountdownTick, getBoomProps, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
-import { playBinauralClick } from '../audio/UiSounds';
+import { AudioStore, BEAT, initAudio, applyGain, inKey } from '../audio/SynthEngine';
+import { playNote, playSwoosh, playKnock, playCountdownTick, getBoomProps, boomPitches, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
+import { clickHz, playBinauralClick } from '../audio/UiSounds';
 
 export interface SoundDef {
   id: string;
@@ -37,10 +37,10 @@ const WHITE_BLACK_LEVELS: SoundDef[] = LEVEL_TIERS.map(({ boomSize, label }) => 
   situation: `A white cue ball reaches a ${boomSize}-ball group holding a black — the only way a black is destroyed`,
   getParamsText: () => {
     const p = getBoomProps(boomSize);
-    const tone = p.tone * 1.8;
+    const dive = boomPitches(boomSize, true);
     const wbVol = getWhiteBlackBoomVol(boomSize);
     const loudest = wbVol >= getWhiteBlackBoomVol(12) ? ' ◀ LOUDEST' : '';
-    return `Lifted ×1.8 — Pitch Dive: ${Math.round(tone * 3.4)}Hz → ${Math.round(tone * 0.5)}Hz | + Struck-metal ring (×6, ×9.2) | Dur: ${(p.dur * 0.85).toFixed(2)}s | Level vol: ${wbVol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\n${echoText(boomSize, true)}`;
+    return `Lifted ×1.8 — Pitch Dive: ${Math.round(dive.start)}Hz → ${Math.round(dive.land)}Hz → ${Math.round(dive.end)}Hz | + Struck-metal ring (×6, ×9.2) | Dur: ${(p.dur * 0.85).toFixed(2)}s | Level vol: ${wbVol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\n${echoText(boomSize, true)}`;
   },
   play: () => {
     initAudio();
@@ -63,7 +63,7 @@ const BLACK_LOCK_LEVELS: SoundDef[] = LEVEL_TIERS.flatMap(({ boomSize, label }) 
       const lift = isPair ? PAIR_LIFT : 1;
       const dur = l.dur * (isPair ? PAIR_DUR : 1);
       const vol = l.vol * (isPair ? PAIR_VOL : 1);
-      return `Arc: ${Math.round(2400 * lift)}Hz → ${Math.round(450 * lift)}Hz | Dur: ${dur.toFixed(2)}s | Drive ×${l.drive.toFixed(2)} | Sub ×${(l.sub * (isPair ? PAIR_SUB_LIFT : 1)).toFixed(2)} | Vol: lockVol × ${vol.toFixed(2)} (${Math.round(AudioStore.lockVol * vol * 100)}%)`;
+      return `Arc: ${Math.round(inKey(2400 * lift))}Hz → ${Math.round(inKey(450 * lift))}Hz | Dur: ${dur.toFixed(2)}s | Drive ×${l.drive.toFixed(2)} | Sub ×${(l.sub * (isPair ? PAIR_SUB_LIFT : 1)).toFixed(2)} | Vol: lockVol × ${vol.toFixed(2)} (${Math.round(AudioStore.lockVol * vol * 100)}%)`;
     },
     play: () => {
       initAudio();
@@ -89,7 +89,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     name: 'Black Ball Magnet Lock',
     category: 'Game FX',
     situation: 'A coloured ball or group attaches to a black ball with an electric arc zap and magnetic suction snap',
-    getParamsText: () => `Electric Square Arc FM Zap + Bandpass Static Discharge + Magnetic Sub Snap | Arc: 2400Hz → 450Hz | Controlled Vol (${Math.round(AudioStore.lockVol * 100)}%)`,
+    getParamsText: () => `Electric Square Arc FM Zap + Bandpass Static Discharge + Magnetic Sub Snap | Arc: ${Math.round(inKey(2400))}Hz → ${Math.round(inKey(450))}Hz | Controlled Vol (${Math.round(AudioStore.lockVol * 100)}%)`,
     play: () => {
       initAudio();
       playMagneticElectricSound(0, { ignoreOptionsGuard: true });
@@ -114,7 +114,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => {
       const p = getBoomProps(3);
       const loudest = p.vol >= getBoomProps(18).vol ? ' ◀ LOUDEST' : '';
-      return `Boom size: 3 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(3, false).left * 1000)}/${Math.round(boomEchoSpec(3, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(3, false).feedback.toFixed(2)}, tail ${boomEchoSpec(3, false).tail.toFixed(1)}s`;
+      return `Boom size: 3 balls | Pitch Dive: ${Math.round(boomPitches(3).start)}Hz → ${Math.round(p.tone)}Hz → ${Math.round(boomPitches(3).end)}Hz | Dur: ${p.dur.toFixed(2)}s | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(3, false).left * 1000)}/${Math.round(boomEchoSpec(3, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(3, false).feedback.toFixed(2)}, tail ${boomEchoSpec(3, false).tail.toFixed(1)}s`;
     },
     play: () => {
       initAudio();
@@ -129,7 +129,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => {
       const p = getBoomProps(7);
       const loudest = p.vol >= getBoomProps(18).vol ? ' ◀ LOUDEST' : '';
-      return `Boom size: 7 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(7, false).left * 1000)}/${Math.round(boomEchoSpec(7, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(7, false).feedback.toFixed(2)}, tail ${boomEchoSpec(7, false).tail.toFixed(1)}s`;
+      return `Boom size: 7 balls | Pitch Dive: ${Math.round(boomPitches(7).start)}Hz → ${Math.round(p.tone)}Hz → ${Math.round(boomPitches(7).end)}Hz | Dur: ${p.dur.toFixed(2)}s | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(7, false).left * 1000)}/${Math.round(boomEchoSpec(7, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(7, false).feedback.toFixed(2)}, tail ${boomEchoSpec(7, false).tail.toFixed(1)}s`;
     },
     play: () => {
       initAudio();
@@ -144,7 +144,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => {
       const p = getBoomProps(12);
       const loudest = p.vol >= getBoomProps(18).vol ? ' ◀ LOUDEST' : '';
-      return `Boom size: 12 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(12, false).left * 1000)}/${Math.round(boomEchoSpec(12, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(12, false).feedback.toFixed(2)}, tail ${boomEchoSpec(12, false).tail.toFixed(1)}s`;
+      return `Boom size: 12 balls | Pitch Dive: ${Math.round(boomPitches(12).start)}Hz → ${Math.round(p.tone)}Hz → ${Math.round(boomPitches(12).end)}Hz | Dur: ${p.dur.toFixed(2)}s | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(12, false).left * 1000)}/${Math.round(boomEchoSpec(12, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(12, false).feedback.toFixed(2)}, tail ${boomEchoSpec(12, false).tail.toFixed(1)}s`;
     },
     play: () => {
       initAudio();
@@ -159,7 +159,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => {
       const p = getBoomProps(18);
       const loudest = p.vol >= getBoomProps(18).vol ? ' ◀ LOUDEST' : '';
-      return `Boom size: 18 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s + 808 Sub-Drop | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(18, false).left * 1000)}/${Math.round(boomEchoSpec(18, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(18, false).feedback.toFixed(2)}, tail ${boomEchoSpec(18, false).tail.toFixed(1)}s`;
+      return `Boom size: 18 balls | Pitch Dive: ${Math.round(boomPitches(18).start)}Hz → ${Math.round(p.tone)}Hz → ${Math.round(boomPitches(18).end)}Hz | Dur: ${p.dur.toFixed(2)}s + 808 Sub-Drop | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(18, false).left * 1000)}/${Math.round(boomEchoSpec(18, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(18, false).feedback.toFixed(2)}, tail ${boomEchoSpec(18, false).tail.toFixed(1)}s`;
     },
     play: () => {
       initAudio();
@@ -174,7 +174,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => {
       const p = getBoomProps(25);
       const loudest = p.vol >= getBoomProps(18).vol ? ' ◀ LOUDEST' : '';
-      return `Boom size: 25 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s + 808 Sub-Drop | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(25, false).left * 1000)}/${Math.round(boomEchoSpec(25, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(25, false).feedback.toFixed(2)}, tail ${boomEchoSpec(25, false).tail.toFixed(1)}s`;
+      return `Boom size: 25 balls | Pitch Dive: ${Math.round(boomPitches(25).start)}Hz → ${Math.round(p.tone)}Hz → ${Math.round(boomPitches(25).end)}Hz | Dur: ${p.dur.toFixed(2)}s + 808 Sub-Drop | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(25, false).left * 1000)}/${Math.round(boomEchoSpec(25, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(25, false).feedback.toFixed(2)}, tail ${boomEchoSpec(25, false).tail.toFixed(1)}s`;
     },
     play: () => {
       initAudio();
@@ -219,7 +219,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     name: 'Countdown Tick',
     category: 'System & UI',
     situation: 'Clock counting down each second at match start or final 10 seconds of match',
-    getParamsText: () => `High-Pitch Sine Beep: 1180 Hz | Dur: 0.09s | Fixed Vol: 22%`,
+    getParamsText: () => `High-Pitch Sine Beep: ${Math.round(inKey(1180))} Hz | Dur: 0.09s | Fixed Vol: 22%`,
     play: () => {
       initAudio();
       playCountdownTick({ ignoreOptionsGuard: true });
@@ -230,7 +230,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     name: 'Countdown GO! / Finish',
     category: 'System & UI',
     situation: 'Match start moment ("Start!") or match final timer end ("0")',
-    getParamsText: () => `High-Pitch Sine Beep: 1180 Hz | Dur: 0.16s | Fixed Vol: 30%`,
+    getParamsText: () => `High-Pitch Sine Beep: ${Math.round(inKey(1180))} Hz | Dur: 0.16s | Fixed Vol: 30%`,
     play: () => {
       initAudio();
       playCountdownTick({ isGo: true, ignoreOptionsGuard: true });
@@ -241,10 +241,10 @@ export const SOUND_CATALOG: SoundDef[] = [
     name: 'Binaural UI Click',
     category: 'System & UI',
     situation: 'Menu button presses, option toggles, or pausing the game',
-    getParamsText: () => `Binaural Beat: 5Hz (259.1Hz L / 264.1Hz R) | Sub-Harmonic | Dur: 0.16s`,
+    getParamsText: () => `Binaural Beat: ${BEAT}Hz (${(clickHz('cancel') - BEAT / 2).toFixed(1)}Hz L / ${(clickHz('cancel') + BEAT / 2).toFixed(1)}Hz R) | Sub-Harmonic | Dur: 0.16s`,
     play: () => {
       initAudio();
-      playBinauralClick(261.63, 0.16, 0, 'toggle', 1.0, true);
+      playBinauralClick(clickHz('cancel'), 0.16, 0, 'toggle', 1.0, true);
     }
   },
   {

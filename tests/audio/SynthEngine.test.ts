@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { buildScale, loadAt_, applyDrone, fadeDroneForResults, stopAllVoices, registerActiveNode, AudioStore, initAudio, wakeAudio } from '../../src/audio/SynthEngine';
+import { buildScale, loadAt_, applyDrone, fadeDroneForResults, stopAllVoices, registerActiveNode, AudioStore, initAudio, wakeAudio, inKey, scaleNote, SCALES, SCALE_ROOT } from '../../src/audio/SynthEngine';
 
 describe('SynthEngine module', () => {
   describe('buildScale', () => {
@@ -131,6 +131,32 @@ describe('SynthEngine module', () => {
       AudioStore.actx = null;
       expect(() => wakeAudio()).not.toThrow();
       expect(master.gain.setTargetAtTime).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('inKey and scaleNote', () => {
+    const saved = AudioStore.scaleName;
+    afterEach(() => { AudioStore.scaleName = saved; });
+
+    it('moves a pitch at most two semitones, onto a note it then leaves alone', () => {
+      for (const name of Object.keys(SCALES)) {
+        AudioStore.scaleName = name;
+        for (let f = 40; f < 5000; f *= 1.037) {
+          const k = inKey(f);
+          expect(Math.abs(12 * Math.log2(k / f)), `${name} ${f}`).toBeLessThanOrEqual(2 + 1e-9);
+          expect(inKey(k)).toBeCloseTo(k, 9);
+        }
+      }
+    });
+
+    it('counts scale steps up and down from A2', () => {
+      for (const name of Object.keys(SCALES)) {
+        AudioStore.scaleName = name;
+        expect(scaleNote(0)).toBeCloseTo(SCALE_ROOT, 9);
+        expect(scaleNote(5)).toBeCloseTo(SCALE_ROOT * 2, 9);
+        expect(scaleNote(-5)).toBeCloseTo(SCALE_ROOT / 2, 9);
+        for (let d = -10; d < 15; d++) expect(scaleNote(d + 1)).toBeGreaterThan(scaleNote(d));
+      }
     });
   });
 });

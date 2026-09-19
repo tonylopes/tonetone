@@ -1,4 +1,4 @@
-import { AudioStore, BEAT, SILENCE, isOptionsOpen, loadAt_, MAX_THUDS, MAX_VOICES, triggerHaptic } from './SynthEngine';
+import { AudioStore, BEAT, SILENCE, isOptionsOpen, loadAt_, MAX_THUDS, MAX_VOICES, triggerHaptic, inKey, scaleNote } from './SynthEngine';
 import { boomTierOf, BOOM_TIER_COUNT as RULES_BOOM_TIER_COUNT } from '../game/Rules';
 
 export const BREAK_VOICE = {
@@ -29,7 +29,7 @@ export function playCountdownTick(opts: { isGo?: boolean; ignoreOptionsGuard?: b
   // per-kind level knobs and the duck mixer, so it reads louder than its
   // amplitude suggests next to the game's 110-400 Hz voices.
   const vol = isGo ? 0.065 : 0.045;
-  const freq = 1180;                     // bright, above the game palette
+  const freq = inKey(1180);              // bright, above the game palette, in key
   const dur = isGo ? 0.16 : 0.09;
 
   const parts: (AudioNode & { stop?: () => void })[] = [];
@@ -251,7 +251,16 @@ export function boomVolumeRamp(peakTier: number, floor: number, falloff: number)
   return out;
 }
 
-const BOOM_TONE = [80, 105, 135, 170, 210];
+/**
+ * The scale step each tier's dive lands on, counted from A2 (see `scaleNote`):
+ * rising a step or two a tier, near the 88 / 116 / 149 / 187 / 231 Hz the dive
+ * landed on when it was fixed. Explicit steps rather than `inKey`, so no two
+ * tiers can land on the same note in any scale.
+ */
+const BOOM_STEPS = [-1, 0, 2, 4, 5];
+
+/** How far above its landing note a boom's dive starts. */
+const DIVE_FROM = 3.4 / 1.1;
 const BOOM_DUR = [0.60, 1.00, 1.10, 1.25, 1.40];
 
 /**
@@ -293,13 +302,24 @@ export const BOOM_VOL_RAMP = boomVolumeRamp(3, 0.40, 0.25);
 export const WHITE_BLACK_VOL_RAMP = boomVolumeRamp(2, 0.50, 0.25);
 
 /**
- * Tone (end frequency in Hz), duration (seconds) and volume for the ordinary
- * boom voice. Tone and duration rise across every tier; volume follows
- * `BOOM_VOL_RAMP` and peaks at Level 15-20.
+ * Tone (the scale note the dive lands on, in Hz), duration (seconds) and volume
+ * for the ordinary boom voice. Tone and duration rise across every tier; volume
+ * follows `BOOM_VOL_RAMP` and peaks at Level 15-20.
  */
 export function getBoomProps(boomSize: number) {
   const i = boomTier(boomSize);
-  return { tone: BOOM_TONE[i], dur: BOOM_DUR[i], vol: BOOM_VOL_RAMP[i] };
+  return { tone: scaleNote(BOOM_STEPS[i]), dur: BOOM_DUR[i], vol: BOOM_VOL_RAMP[i] };
+}
+
+/**
+ * The boom's pitch dive, all on notes of the current scale: it starts high, lands
+ * on the tier's note 50ms in, and glides down to the octave below. The white-on-
+ * black boom lands on the scale note nearest `WHITE_BLACK_LIFT` above.
+ */
+export function boomPitches(boomSize: number, whiteBlack = false) {
+  const tone = getBoomProps(boomSize).tone;
+  const land = whiteBlack ? inKey(tone * WHITE_BLACK_LIFT) : tone;
+  return { start: inKey(land * DIVE_FROM), land, end: land / 2 };
 }
 
 /**
@@ -377,7 +397,6 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, opts: BoomOpti
   // The lifted boom carries more of its energy where the ear is most sensitive,
   // so it is shortened, and takes its level from its own ramp rather than a flat
   // multiple of this one's — the two peak at different tiers on purpose.
-  const tone = props.tone * (whiteBlack ? WHITE_BLACK_LIFT : 1);
   const dur = props.dur * (whiteBlack ? 0.85 : 1);
   const vol = whiteBlack ? getWhiteBlackBoomVol(boomSize) : props.vol;
   // Every tier drives the compressor at the SAME level. The tier ramp and the
@@ -393,9 +412,7 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, opts: BoomOpti
   // lands 1:1.
   const peak = BOOM_DRIVE;
 
-  const startPitch = tone * 3.4;
-  const midPitch = tone * 1.1;
-  const endPitch = tone * 0.50;
+  const { start: startPitch, land: midPitch, end: endPitch } = boomPitches(boomSize, whiteBlack);
 
   const parts: (AudioNode & { stop?: () => void })[] = [];
 
@@ -486,9 +503,9 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, opts: BoomOpti
       const g = actx.createGain();
       parts.push(osc, g);
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(tone * mode.ratio, t);
+      osc.frequency.setValueAtTime(midPitch * mode.ratio, t);
       // A slight downward drift over the tail: struck metal sags as it rings out.
-      rampFreq(osc.frequency, tone * mode.ratio * 0.97, t + mode.decay);
+      rampFreq(osc.frequency, midPitch * mode.ratio * 0.97, t + mode.decay);
       g.gain.value = SILENCE;
       g.gain.setValueAtTime(SILENCE, now);
       g.gain.setValueAtTime(SILENCE, t);
@@ -533,7 +550,7 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, opts: BoomOpti
     parts.push(subOsc, subGain);
     subOsc.type = 'sine';
     subOsc.frequency.setValueAtTime(startPitch * 0.5, t);
-    rampFreq(subOsc.frequency, endPitch * 0.45, t + dur);
+    rampFreq(subOsc.frequency, endPitch * 0.5, t + dur);
     subGain.gain.value = SILENCE;
     subGain.gain.setValueAtTime(SILENCE, now);
     subGain.gain.setValueAtTime(SILENCE, t);
@@ -913,8 +930,8 @@ export function playMagneticElectricSound(xNorm: number = 0, opts: MagnetLockOpt
   parts.push(carrier, modOsc, modGain);
 
   carrier.type = 'square';
-  carrier.frequency.setValueAtTime(2400 * lift, t);
-  rampFreq(carrier.frequency, 450 * lift, t + dur);
+  carrier.frequency.setValueAtTime(inKey(2400 * lift), t);
+  rampFreq(carrier.frequency, inKey(450 * lift), t + dur);
 
   modOsc.type = 'sawtooth';
   modOsc.frequency.setValueAtTime(220 * lift, t);
@@ -970,9 +987,9 @@ export function playMagneticElectricSound(xNorm: number = 0, opts: MagnetLockOpt
   parts.push(subOsc, subGain);
 
   subOsc.type = 'sine';
-  subOsc.frequency.setValueAtTime(130 * subLift, t);
-  rampFreq(subOsc.frequency, 320 * subLift, t + 0.03);
-  rampFreq(subOsc.frequency, 90 * subLift, t + dur);
+  subOsc.frequency.setValueAtTime(inKey(130 * subLift), t);
+  rampFreq(subOsc.frequency, inKey(320 * subLift), t + 0.03);
+  rampFreq(subOsc.frequency, inKey(90 * subLift), t + dur);
 
   subGain.gain.value = SILENCE;
   subGain.gain.setValueAtTime(SILENCE, now);
@@ -1051,7 +1068,9 @@ function playWhiteSwoosh(xNorm: number, normForce: number) {
 
   // The swing: modes rise as the ball is thrown, then fall away behind it. A
   // wider arc travelled faster is the difference between a swing and a wave.
-  const baseStart = 460, baseMid = 1700, baseEnd = 560;
+  // The metal-bar mode ratios stay inharmonic; the fundamental they sit on
+  // follows the scale.
+  const baseStart = inKey(460), baseMid = inKey(1700), baseEnd = inKey(560);
   const bias = Math.max(-1, Math.min(1, xNorm || 0));
 
   const parts: any[] = [];
@@ -1137,7 +1156,7 @@ function playWhiteSwoosh(xNorm: number, normForce: number) {
     const subGain = actx.createGain();
     parts.push(sub, subGain);
     sub.type = 'sine';
-    const s0 = 190 + offset, s1 = 430 + offset, s2 = 150 + offset;
+    const s0 = inKey(190) + offset, s1 = inKey(430) + offset, s2 = inKey(150) + offset;
     sub.frequency.value = s0;
     sub.frequency.setValueAtTime(s0, now);
     sub.frequency.setValueAtTime(s0, t);
@@ -1227,9 +1246,9 @@ export function playSwoosh(xNorm: number, force: number, opts: SwooshOptions = {
   parts.push(osc, oscGain);
   osc.type = 'sine';
 
-  const startP = 130;
-  const midP = 260;
-  const endP = 100;
+  const startP = inKey(130);
+  const midP = inKey(260);
+  const endP = inKey(100);
 
   osc.frequency.value = startP;
   osc.frequency.setValueAtTime(startP, now);

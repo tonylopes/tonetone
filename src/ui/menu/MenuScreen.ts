@@ -1,5 +1,5 @@
 import { AudioStore, applyGain, isOptionsOpen } from '../../audio/SynthEngine';
-import { CLICK_SELECT_HZ, initMenuAudio, lastSelectAt, playBinauralClick } from '../../audio/UiSounds';
+import { clickHz, initMenuAudio, lastSelectAt, playBinauralClick } from '../../audio/UiSounds';
 import { PlayMode } from '../../game/GameState';
 import { clearSpriteCache } from '../../graphics/Sprites';
 import { uiFont } from '../../graphics/Fonts';
@@ -245,7 +245,7 @@ function handleInteraction(px?: number, py?: number) {
   lastInteractionTimestamp = nowMs;
   clickedItemIndex = targetIndex;
   const normX = width > 0 ? (px !== undefined ? (px / width) * 2 - 1 : 0) : 0;
-  playBinauralClick(CLICK_SELECT_HZ, 0.16, normX, 'select');
+  playBinauralClick(clickHz('select'), 0.16, normX, 'select');
 
   const selectedItem = menuItems[targetIndex];
   if (!selectedItem) return;
