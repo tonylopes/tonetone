@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { playNote, playSwoosh, playKnock, getBoomProps, boomPitches, playBoom, playCountdownTick, playMagneticElectricSound, BOND_VOICE, BREAK_VOICE, KNOCK_MODES, KNOCK_RING, TICK_LEVEL, TICK_GO_LEVEL, SWOOSH_METAL_MODES, boomEchoSpec, getMagnetLockProps, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL, pickGameBoom, playRandomGameBoom, resetAttractBooms, getWhiteBlackBoomVol, boomVolumeRamp, BOOM_VOL_RAMP, WHITE_BLACK_VOL_RAMP, BOOM_TIER_COUNT } from '../../src/audio/Voices';
+import { playNote, playSwoosh, playKnock, getBoomProps, boomPitches, playBoom, playCountdownTick, playMagneticElectricSound, BOND_VOICE, BREAK_VOICE, BOOM_HARMONICS, KNOCK_MODES, KNOCK_RING, TICK_LEVEL, TICK_GO_LEVEL, SWOOSH_METAL_MODES, boomEchoSpec, getMagnetLockProps, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL, pickGameBoom, playRandomGameBoom, resetAttractBooms, getWhiteBlackBoomVol, boomVolumeRamp, BOOM_VOL_RAMP, WHITE_BLACK_VOL_RAMP, BOOM_TIER_COUNT } from '../../src/audio/Voices';
 import { AudioStore, BEAT, SCALE_NOTES, SCALE_ROOT, SCALE_STEPS, inKey } from '../../src/audio/SynthEngine';
 import { clickHz, playBinauralClick, resetUiSoundsForTesting, setClickLockMs } from '../../src/audio/UiSounds';
 
@@ -513,8 +513,11 @@ describe('Voices module', () => {
 
       const lockNote = (rel: number) => SCALE_NOTES[Math.floor(rel * 10)] * BOND_VOICE.mul;
       expect(lockNote(relRed)).not.toBe(lockNote(relBlue));
-      expect(fundamentals).toContain(lockNote(relRed) * 2);
-      expect(fundamentals).toContain(lockNote(relBlue) * 2);
+      // Each partial is a binaural pair, ±BEAT/2 around the note.
+      for (const rel of [relRed, relBlue]) {
+        expect(fundamentals).toContain(lockNote(rel) * 2 - BEAT / 2);
+        expect(fundamentals).toContain(lockNote(rel) * 2 + BEAT / 2);
+      }
     });
 
     it('rings like a struck piano string, not a wooden bar', () => {
@@ -532,9 +535,10 @@ describe('Voices module', () => {
       });
       expect(KNOCK_RING).toBe(KNOCK_MODES[0].decay);
       // Long enough to be a note rather than a click, short enough that the most
-      // frequent voice in the game does not turn the table into mud.
-      expect(KNOCK_RING).toBeGreaterThan(0.25);
-      expect(KNOCK_RING).toBeLessThan(0.6);
+      // frequent voice in the game does not turn the table into mud. 0.42s was
+      // tried and was too long.
+      expect(KNOCK_RING).toBeGreaterThan(0.1);
+      expect(KNOCK_RING).toBeLessThan(0.25);
     });
 
     it('keeps the countdown tick under the voices it plays over', () => {
@@ -722,9 +726,14 @@ describe('Voices module', () => {
       expect(lifted.oscCount).toBe(plain.oscCount + 2);
     });
 
-    it('leaves the ordinary boom with nothing above its own dive', () => {
+    it('leaves the ordinary boom with no metal above its own dive and partials', () => {
+      // The lifted boom's ring sits far above everything the plain one has: its
+      // dive, the binaural pair around it, and the ×2 and ×3 partials that carry
+      // the pitch on a small speaker.
       const plain = boom(false);
-      expect(Math.max(...plain.starts)).toBeCloseTo(boomPitches(7).start + 2.5, 4);
+      const top = boomPitches(7).start * Math.max(...BOOM_HARMONICS.map(h => h.ratio));
+      expect(Math.max(...plain.starts)).toBeCloseTo(top, 4);
+      expect(Math.max(...boom(true).starts)).toBeGreaterThan(top * 1.5);
     });
   });
   describe('boom echo', () => {
@@ -1103,9 +1112,16 @@ describe('Voices module', () => {
       const within = semis - 12 * Math.floor(semis / 12);
       return Math.min(...steps.map(st => Math.abs(within - st)));
     }
-    /** In key, allowing for the ±BEAT/2 offset of a binaural pair. */
+    /**
+     * In key, allowing for the ±BEAT/2 offset of a binaural pair and for the
+     * harmonics of a scale note. A partial at ×2 or ×3 of a note is part of that
+     * note's own sound, not a melody note of its own: the boom carries them so a
+     * phone speaker, which reproduces almost nothing below ~500 Hz, still gets
+     * the pitch of a dive whose fundamental it cannot move.
+     */
     function inTune(f: number): boolean {
-      return [f, f - BEAT / 2, f + BEAT / 2].some(g => g > 0 && offKey(g) < 1e-6);
+      return [f, f - BEAT / 2, f + BEAT / 2].some(g =>
+        g > 0 && [1, 2, 3].some(partial => offKey(g / partial) < 1e-6));
     }
 
     /**

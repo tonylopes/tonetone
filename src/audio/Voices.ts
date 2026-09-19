@@ -583,6 +583,33 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, opts: BoomOpti
   // crackle. On headphones it was also fighting the dive it doubled, so taking it
   // out *raised* the measured level of a 20+ boom rather than thinning it.
 
+  // Harmonics of the dive, ×2 and ×3, placed after the low cut so it cannot take
+  // them away. A phone speaker reproduces almost nothing below ~500 Hz, so the
+  // dive's own fundamental is both inaudible and what makes the cone crackle;
+  // these put the same pitch where the speaker works. The ear hears the pitch of
+  // a harmonic series from its partials even when the fundamental is missing, so
+  // the boom keeps its depth on a phone and gains a little bite on headphones.
+  for (const h of BOOM_HARMONICS) {
+    const osc = actx.createOscillator();
+    const g = actx.createGain();
+    parts.push(osc, g);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(startPitch * h.ratio, t);
+    rampFreq(osc.frequency, midPitch * h.ratio, t + 0.05);
+    rampFreq(osc.frequency, endPitch * h.ratio, t + dur);
+    g.gain.value = SILENCE;
+    g.gain.setValueAtTime(SILENCE, now);
+    g.gain.setValueAtTime(SILENCE, t);
+    g.gain.linearRampToValueAtTime(Math.max(SILENCE, peak * h.amp), t + 0.02);
+    g.gain.linearRampToValueAtTime(Math.max(SILENCE, peak * h.amp * 0.45), t + dur * 0.55);
+    g.gain.linearRampToValueAtTime(SILENCE, t + dur);
+    g.gain.linearRampToValueAtTime(0, t + dur + 0.04);
+    osc.connect(g);
+    g.connect(trim);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+  }
+
   // Left binaural channel oscillator with rapid pitch-drop sweep
   const leftOsc = actx.createOscillator();
   parts.push(leftOsc);
@@ -1081,7 +1108,7 @@ function playWhiteSwoosh(xNorm: number, normForce: number) {
 
   // Narrow bandpasses pass far less of the noise than a wide lowpass does, so
   // this runs well above the level the old mono swoosh used for the same swing.
-  const peak = 0.20 * Math.max(0.15, normForce) * AudioStore.clickVol;
+  const peak = 0.125 * Math.max(0.15, normForce) * AudioStore.clickVol;
   if (peak < 0.001) return;
 
   triggerHaptic('heavy');
@@ -1315,16 +1342,28 @@ export function playSwoosh(xNorm: number, force: number, opts: SwooshOptions = {
  *   multiples, by `n × sqrt(1 + B n²)` with B ≈ 4e-4 for a mid-range string. The
  *   stretch is small — 9 cents at the fifth partial — and it is most of what
  *   separates a piano from an organ.
- * - **The fundamental rings longest**, 0.42s against the fifth partial's 0.05s.
+ * - **The fundamental rings longest**, 0.16s against the third partial's 0.05s.
  *   The top of the sound decays away and leaves the note, which is the shape of
- *   a struck string; the old bar had all three modes gone inside 90 ms.
+ *   a struck string.
+ *
+ * It rang 0.42s over five partials for a few hours on 2026-09-19 and was too
+ * long: knocks are the most frequent voice in the game, and Tony asked for the
+ * string without the tail. Three partials also keep the node count down, which
+ * matters when ten knocks can overlap.
  */
 export const KNOCK_MODES = [
-  { ratio: 1.000, amp: 1.00, decay: 0.42 },
-  { ratio: 2.002, amp: 0.50, decay: 0.24 },
-  { ratio: 3.005, amp: 0.26, decay: 0.14 },
-  { ratio: 4.013, amp: 0.14, decay: 0.08 },
-  { ratio: 5.025, amp: 0.07, decay: 0.05 },
+  { ratio: 1.000, amp: 1.00, decay: 0.16 },
+  { ratio: 2.002, amp: 0.45, decay: 0.09 },
+  { ratio: 3.005, amp: 0.22, decay: 0.05 },
+];
+
+/**
+ * The harmonics carrying the boom's pitch where a small speaker can reproduce it.
+ * Levels are a fraction of the dive's own, and they ride above the low cut.
+ */
+export const BOOM_HARMONICS = [
+  { ratio: 2, amp: 0.34 },
+  { ratio: 3, amp: 0.18 },
 ];
 
 /** The longest a knock rings: its fundamental. */
@@ -1363,10 +1402,10 @@ export function playKnock(xNorm: number, force: number, relHitter: number, relSt
   AudioStore.thudAt = now;
 
   // Sits well under the bond lock at equal sliders (the hardest knock ~8 dB below
-  // a mid-scale lock), since its strike reads louder than the measured gap. Lower
-  // than the wooden bar's 0.085, because a ring of 0.42s carries far more energy
-  // than one of 0.09s at the same peak.
-  const peak = 0.07 * Math.max(0.15, normForce) * AudioStore.clickVol;
+  // a mid-scale lock), since its strike reads louder than the measured gap. The
+  // two sides of each binaural pair carry 0.7 each, so a pair holds about the
+  // energy one oscillator used to.
+  const peak = 0.08 * Math.max(0.15, normForce) * AudioStore.clickVol;
   if (peak < 0.001) return;
   // Tight 10ms lookahead for immediate audio response without JS frame-lag crackle
   const t = now + LOOKAHEAD.brief;
@@ -1380,22 +1419,32 @@ export function playKnock(xNorm: number, force: number, relHitter: number, relSt
   const end = t + 0.018 + KNOCK_RING + 0.03;
 
   const parts: any[] = [];
-  let dest: AudioNode = AudioStore.master!;
-  dest = panInto(dest, Math.max(-1, Math.min(1, xNorm || 0)) * 0.7, parts);
+  const master: AudioNode = AudioStore.master!;
+  const bias = Math.max(-1, Math.min(1, xNorm || 0));
+  // Binaural, like the drone, the boom and the white swoosh: each partial is a
+  // pair `BEAT` Hz apart, one ear each, so the knock has width of its own rather
+  // than being a mono sound placed left or right. Where on the table it happened
+  // biases the two sides instead of collapsing them.
+  const sides = [-1, 1].map(side =>
+    panInto(master, Math.max(-1, Math.min(1, side * 0.8 + bias * 0.2)), parts));
+  const centre = panInto(master, bias * 0.7, parts);
 
   for (const note of notes) {
     KNOCK_MODES.forEach((m, i) => {
-      const osc = actx.createOscillator();
-      const g = actx.createGain();
-      parts.push(osc, g);
-      osc.type = 'sine';
-      osc.frequency.value = note.f * m.ratio;
-      osc.frequency.setValueAtTime(note.f * m.ratio, now);
-      knockEnvelope(g.gain, peak * note.amp * m.amp * (i ? bright : 1), now, note.at, 0.003, m.decay);
-      osc.connect(g);
-      g.connect(dest);
-      osc.start(note.at);
-      osc.stop(end);
+      sides.forEach((dest, s) => {
+        const osc = actx.createOscillator();
+        const g = actx.createGain();
+        parts.push(osc, g);
+        osc.type = 'sine';
+        const f = note.f * m.ratio + (s === 0 ? -BEAT / 2 : BEAT / 2);
+        osc.frequency.value = f;
+        osc.frequency.setValueAtTime(f, now);
+        knockEnvelope(g.gain, peak * note.amp * m.amp * (i ? bright : 1) * 0.7, now, note.at, 0.003, m.decay);
+        osc.connect(g);
+        g.connect(dest);
+        osc.start(note.at);
+        osc.stop(end);
+      });
     });
   }
 
@@ -1416,7 +1465,7 @@ export function playKnock(xNorm: number, force: number, relHitter: number, relSt
   parts.push(src, cg, bp);
   src.connect(cg);
   cg.connect(bp);
-  bp.connect(dest);
+  bp.connect(centre);
 
   const bufDur = AudioStore.noiseBuf?.duration || 2.0;
   src.start(t, Math.random() * Math.max(0, bufDur - 0.5));

@@ -240,7 +240,7 @@ const KNOB_SPECS = {
   },
 
   boomcut: {
-    group: 'audio', kind: 'range', min: 40, max: 300, step: 5, default: 160,
+    group: 'audio', kind: 'range', min: 40, max: 600, step: 5, default: 300,
     wakesAudio: true, cosmetic: true,
     apply: v => { AudioStore.boomCut = v as number; },
     format: v => Math.round(v as number) + 'Hz',
