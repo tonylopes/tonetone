@@ -32,6 +32,33 @@ export function clickHz(note: ClickNote): number {
 const CLICK_SECONDS = 0.16;
 
 /**
+ * How long a hover lasts, and how loud it is at its peak.
+ *
+ * The hover is the only click nobody asked for: it fires because a pointer
+ * crossed a button, not because anyone pressed one. It was a 0.10s blip at 0.06,
+ * short and near enough in level to the 0.30 select that running a mouse down
+ * the list sounded like choosing four things. It is now longer and much quieter
+ * — a soft ring rather than a tap — so that it reads as the pointer being
+ * somewhere rather than as something having happened.
+ */
+const HOVER_SECONDS = 0.34;
+const HOVER_VOL = 0.035;
+
+/** The rise every click shares, in seconds. */
+const CLICK_ATTACK = 0.015;
+
+/**
+ * The hover's tail: it falls to this fraction of its peak `HOVER_KNEE` seconds
+ * in, then fades from there over the rest of its length.
+ *
+ * Without the knee a 0.34s click is a triangle, which swells and reads as a pad.
+ * The fast drop keeps the attack a click; the long quiet tail is what makes it
+ * last. Every other click keeps the straight fall it always had.
+ */
+const HOVER_TAIL = 0.3;
+const HOVER_KNEE = 0.05;
+
+/**
  * How far ahead the click schedules itself, in seconds.
  *
  * The longest look-ahead of any voice. A click fires straight off a pointer
@@ -105,6 +132,41 @@ export function uiClick(kind: 'confirm' | 'cancel') {
 }
 
 /**
+ * The amplitude shape all three of a click's oscillators share: silent until the
+ * scheduled start, a fast rise to `peak`, then a fall to nothing by `dur`.
+ *
+ * `tail` bends that fall — 0 for a straight line, or a fraction of the peak to
+ * drop to at the knee and fade from. The three voices differ only in `peak`, so
+ * this was the same five lines written three times.
+ */
+function shapeClick(
+  gain: GainNode,
+  peak: number,
+  now: number,
+  pTime: number,
+  dur: number,
+  tail: number
+) {
+  gain.gain.value = SILENCE;
+  gain.gain.setValueAtTime(SILENCE, now);
+  gain.gain.setValueAtTime(SILENCE, pTime);
+  gain.gain.linearRampToValueAtTime(peak, pTime + CLICK_ATTACK);
+  if (tail > 0) gain.gain.linearRampToValueAtTime(peak * tail, pTime + CLICK_ATTACK + HOVER_KNEE);
+  gain.gain.linearRampToValueAtTime(0, pTime + dur);
+}
+
+/**
+ * The soft ring a button makes when a mouse moves onto it.
+ *
+ * Only a mouse plays this. A finger sliding across the menu highlights buttons
+ * silently, because it has not chosen anything until it lifts — see
+ * `ui/menu/MenuScreen.ts`.
+ */
+export function playHoverClick(freq: number, xNorm: number) {
+  playBinauralClick(freq, HOVER_SECONDS, xNorm, 'hover');
+}
+
+/**
  * Plays a single spatial 3D binaural menu click audio effect with left/right channel frequency separation,
  * sub-harmonic resonance, lowpass smoothing, and interaural Haas spatial delay.
  */
@@ -140,7 +202,8 @@ export function playBinauralClick(
       targetFreq = Math.min(freq, clickHz('cancel'));
     }
 
-    const baseVol = (clickType === 'hover' ? 0.06 : clickType === 'toggle' ? 0.22 : 0.30) * volBoost;
+    const baseVol = (clickType === 'hover' ? HOVER_VOL : clickType === 'toggle' ? 0.22 : 0.30) * volBoost;
+    const tail = clickType === 'hover' ? HOVER_TAIL : 0;
 
     const leftPanVal = Math.max(-1, Math.min(1, -0.85 + xNorm * 0.25));
     const rightPanVal = Math.max(-1, Math.min(1, 0.85 + xNorm * 0.25));
@@ -167,11 +230,7 @@ export function playBinauralClick(
     nodesToClean.push(subOsc, subGain);
     subOsc.type = 'sine';
     subOsc.frequency.setValueAtTime(targetFreq * 0.5, pTime);
-    subGain.gain.value = SILENCE;
-    subGain.gain.setValueAtTime(SILENCE, now);
-    subGain.gain.setValueAtTime(SILENCE, pTime);
-    subGain.gain.linearRampToValueAtTime(baseVol * 0.35, pTime + 0.015);
-    subGain.gain.linearRampToValueAtTime(0, pTime + dur);
+    shapeClick(subGain, baseVol * 0.35, now, pTime, dur, tail);
     subOsc.connect(subGain);
     subGain.connect(lpFilter);
     subOsc.start(pTime);
@@ -186,11 +245,7 @@ export function playBinauralClick(
     leftOsc.type = 'sine';
     leftOsc.frequency.setValueAtTime(leftFreq, pTime);
 
-    leftGain.gain.value = SILENCE;
-    leftGain.gain.setValueAtTime(SILENCE, now);
-    leftGain.gain.setValueAtTime(SILENCE, pTime);
-    leftGain.gain.linearRampToValueAtTime(baseVol, pTime + 0.015);
-    leftGain.gain.linearRampToValueAtTime(0, pTime + dur);
+    shapeClick(leftGain, baseVol, now, pTime, dur, tail);
 
     if (actx.createStereoPanner) {
       const panL = actx.createStereoPanner();
@@ -216,11 +271,7 @@ export function playBinauralClick(
     rightOsc.type = 'sine';
     rightOsc.frequency.setValueAtTime(rightFreq, pTime);
 
-    rightGain.gain.value = SILENCE;
-    rightGain.gain.setValueAtTime(SILENCE, now);
-    rightGain.gain.setValueAtTime(SILENCE, pTime);
-    rightGain.gain.linearRampToValueAtTime(baseVol * 0.95, pTime + 0.015);
-    rightGain.gain.linearRampToValueAtTime(0, pTime + dur);
+    shapeClick(rightGain, baseVol * 0.95, now, pTime, dur, tail);
 
     if (actx.createStereoPanner) {
       const panR = actx.createStereoPanner();

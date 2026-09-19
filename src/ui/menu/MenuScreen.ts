@@ -1,5 +1,5 @@
 import { AudioStore, applyGain, isOptionsOpen } from '../../audio/SynthEngine';
-import { clickHz, initMenuAudio, lastSelectAt, playBinauralClick } from '../../audio/UiSounds';
+import { clickHz, initMenuAudio, lastSelectAt, playBinauralClick, playHoverClick } from '../../audio/UiSounds';
 import { PlayMode } from '../../game/GameState';
 import { clearSpriteCache } from '../../graphics/Sprites';
 import { uiFont } from '../../graphics/Fonts';
@@ -38,7 +38,22 @@ let isTransitioning = false;
 let onModeSelectCallback: ((mode: PlayMode) => void) | null = null;
 let onOptionsCallback: (() => void) | null = null;
 
-const pointer = { x: -1000, y: -1000, isDown: false };
+/**
+ * Where the pointer is, whether it is pressed, and whether it is a mouse.
+ *
+ * `isMouse` is what splits the two input stories. A mouse hovers without
+ * pressing, so it highlights and sounds as it moves and chooses on the way down.
+ * A finger cannot hover: it lands, slides, and lifts, so it highlights silently
+ * while it is down and chooses on the way up, over whichever button it is on.
+ * Parked off-screen means nothing is highlighted.
+ */
+const pointer = { x: -1000, y: -1000, isDown: false, isMouse: true };
+
+/** Move the pointer where no button is, so the highlight clears. */
+function parkPointer() {
+  pointer.x = -1000;
+  pointer.y = -1000;
+}
 let activeHoverIndex = -1;
 let clickedItemIndex = -1;
 let lastInteractionTimestamp = 0;
@@ -168,11 +183,14 @@ function drawMenu(c: CanvasRenderingContext2D, layout: MenuLayout) {
     c.restore();
   });
 
-  if (currentHoverIndex !== -1 && currentHoverIndex !== prevHoverIndex) {
+  // Only a mouse sounds as the highlight moves. A finger sliding down the list
+  // would otherwise fire a blip per button crossed, turning one considered tap
+  // into a rattle — and the finger has not chosen anything yet.
+  if (pointer.isMouse && currentHoverIndex !== -1 && currentHoverIndex !== prevHoverIndex) {
     const now = performance.now();
     if (now - lastSelectAt() > HOVER_QUIET_MS && now - lastInteractionTimestamp > HOVER_QUIET_MS) {
       const normX = width > 0 ? (pointer.x / width) * 2 - 1 : 0;
-      playBinauralClick(HOVER_BASE_HZ + currentHoverIndex * HOVER_STEP_HZ, 0.10, normX, 'hover');
+      playHoverClick(HOVER_BASE_HZ + currentHoverIndex * HOVER_STEP_HZ, normX);
     }
   }
   activeHoverIndex = currentHoverIndex;
@@ -448,41 +466,53 @@ export function initMenuScreen(onSelectMode: (mode: PlayMode) => void, onOptions
       if (!document.hidden) recoverCanvas();
     });
 
-    window.addEventListener('mousemove', (e) => {
-      if (!menuActive) return;
-      const p = getCanvasPointer(e);
-      pointer.x = p.x;
-      pointer.y = p.y;
-    });
-
-    window.addEventListener('mousedown', (e) => {
+    // Pointer events, one stream for mouse and finger — the same model
+    // `ui/TouchControls.ts` aims the launchers with. The mouse and touch pair
+    // these replace could both fire for one tap, because a browser follows a
+    // touch with a synthesised mousedown, and the menu had only its 180ms
+    // debounce standing between that and a second selection.
+    window.addEventListener('pointerdown', (e) => {
       if (!menuActive) return;
       const p = getCanvasPointer(e);
       pointer.x = p.x;
       pointer.y = p.y;
       pointer.isDown = true;
+      pointer.isMouse = e.pointerType === 'mouse';
+      // The gesture that unlocks the audio context. It has to be the press, not
+      // the release, or the select sound the release plays is the one lost.
       initMenuAudio();
-      handleInteraction(p.x, p.y);
+      if (pointer.isMouse) handleInteraction(p.x, p.y);
     });
 
-    window.addEventListener('mouseup', () => {
-      pointer.isDown = false;
-    });
-
-    window.addEventListener('touchstart', (e) => {
+    window.addEventListener('pointermove', (e) => {
       if (!menuActive) return;
-      if (e.touches.length > 0) {
-        const p = getCanvasPointer(e.touches[0]);
-        pointer.x = p.x;
-        pointer.y = p.y;
-        pointer.isDown = true;
-        initMenuAudio();
-        handleInteraction(p.x, p.y);
-      }
-    }, { passive: true });
+      // A finger only moves the highlight while it is down. Without this, a
+      // stylus or a phone reporting a hover would light buttons nobody is
+      // touching.
+      if (e.pointerType !== 'mouse' && !pointer.isDown) return;
+      pointer.isMouse = e.pointerType === 'mouse';
+      const p = getCanvasPointer(e);
+      pointer.x = p.x;
+      pointer.y = p.y;
+    });
 
-    window.addEventListener('touchend', () => {
+    window.addEventListener('pointerup', (e) => {
+      const wasDown = pointer.isDown;
       pointer.isDown = false;
+      if (!menuActive || e.pointerType === 'mouse') return;
+      // The tap is the lift: whichever button the finger is over now is the one
+      // chosen, and lifting off all of them chooses nothing — `handleInteraction`
+      // returns on a point that hits no button, without a sound.
+      const p = getCanvasPointer(e);
+      pointer.x = p.x;
+      pointer.y = p.y;
+      if (wasDown) handleInteraction(p.x, p.y);
+      parkPointer();
+    });
+
+    window.addEventListener('pointercancel', () => {
+      pointer.isDown = false;
+      parkPointer();
     });
   }
 
