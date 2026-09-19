@@ -8,6 +8,8 @@ import { createStrip } from '../../src/ui/ControlStrips';
 import { createRenderContext, resizeRenderer } from '../../src/graphics/Renderer';
 import { clearSpriteCache } from '../../src/graphics/Sprites';
 import { createGame, resetField, toCollisionState } from '../../src/game/GameState';
+import { advanceFrame } from '../../src/sim/Frame';
+import { launchPointOf } from '../../src/physics/LauncherBays';
 import { LauncherPlayer, Ball, Group } from '../../src/physics/Types';
 import { collide, boomGroup } from '../../src/physics/CollisionSolver';
 import { makeGroup } from '../../src/physics/RigidBody';
@@ -239,6 +241,61 @@ describe('Bug Detection Test Suite', () => {
 
       expect(live.credit).toBe(0);
       expect(live.shot).toBe(shot);
+    });
+  });
+
+  describe('Bug 13: a blocked bay went unrecorded whenever the other bay threw', () => {
+    /**
+     * `advanceFrame` reported the frame's firing as two booleans, and the
+     * harness read them as `threw ? +1 throw : launched ? +1 blocked`. In a duel
+     * both bays fire on the same frame, so one player throwing while the other
+     * was jammed set `threw`, and the blocked bay was never counted. Every duel
+     * measurement of launch blocking therefore read zero.
+     */
+    it('counts the jammed bay even on a frame where the other one throws', () => {
+      const W = 380, H = 620;
+      const game = createGame();
+      game.twoPlayer = true;
+      resetField(game, W, H);
+
+      // Plug player 1's corridor. The balls have to be `exempt` — a freshly
+      // thrown ball's grace period — because that is the only state the bay
+      // mouth does not eject, and so the only way a bay is ever really blocked.
+      // They are spaced just over a diameter apart so the relaxation pass has
+      // nothing to push apart, and cover the six radii `launchSpot` probes.
+      const R = PhysicsConfig.R;
+      const mouth = launchPointOf(game.players[0], W, H);
+      let id = 10_000;
+      for (let d = 0; d <= R * 6 + 2 * R; d += 2 * R + 0.6) {
+        const ball: Ball = {
+          id: id++, x: mouth.x, y: mouth.y - d, kind: 0, special: null, color: '#888',
+          credit: -1, exempt: 1.6, bonds: new Set(), group: null as any,
+        };
+        ball.group = makeGroup([ball], 0, 0);
+        game.balls.push(ball);
+        game.groups.push(ball.group);
+      }
+
+      for (const pl of game.players) { pl.reload = 0; pl.aimDeg = 0; pl.strength = 0.5; }
+      const res = advanceFrame(game, 1 / 60, W, H, 0);
+
+      // Two bays fired: a count, not a flag. A boolean could not say this.
+      expect(res.fired).toBe(2);
+      // Player 2's bay was clear, player 1's was not.
+      expect(res.threw).toBe(1);
+      expect(res.fired - res.threw).toBe(1);
+    });
+
+    it('records both bays on a frame where neither is blocked', () => {
+      const W = 380, H = 620;
+      const game = createGame();
+      game.twoPlayer = true;
+      resetField(game, W, H);
+      for (const pl of game.players) { pl.reload = 0; pl.aimDeg = 0; pl.strength = 0.5; }
+
+      const res = advanceFrame(game, 1 / 60, W, H, 0);
+      expect(res.fired).toBe(2);
+      expect(res.threw).toBe(2);
     });
   });
 

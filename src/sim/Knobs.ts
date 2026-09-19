@@ -300,14 +300,19 @@ export const KNOBS: Record<string, KnobDef> = Object.fromEntries(
 );
 
 /**
- * The three presets, declared once for both consumers.
+ * The presets, declared once for both consumers.
  *
  * A preset is a set of *differences* from the registry defaults, not a full
  * snapshot. `normal` therefore holds nothing at all: it is the shipped default,
  * and selecting it means "put the knobs I touch back where they started". Every
  * value here is measured rather than asserted — see the "Screen Shapes and the
- * Three Presets" study in Notion for the boom rates, group survival and
- * playability guards each one produces.
+ * Presets" study in Notion for the boom rates, group survival and playability
+ * guards each one produces.
+ *
+ * The three added presets are each anchored on one quality the original three
+ * did not deliver — chain depth, table density, and matches that change hands —
+ * and all three run at six colours, which costs only mean boom size (3.47 to
+ * 2.88) and nothing else measurable.
  *
  * Only gameplay knobs appear. Picking a preset must not move a player's volume
  * or their colour-blind ball numbers, so the audio and cosmetic knobs are
@@ -337,7 +342,69 @@ export const PRESETS: Record<string, PresetDef> = {
   chaos: {
     id: 'chaos', label: 'Chaos',
     knobs: {
+      // One minute. Chaos throws at 1.5s and scores roughly 2.4x Normal per
+      // second, so a two-minute match had already said everything it had to say
+      // by the halfway mark; the short clock is what keeps it a sprint.
+      match: 60,
       reload: 1.5, roll: 0.75, boom: 0.3, kickout: 0.8, maxpower: 1500, speedcap: 3600,
+    },
+  },
+
+  /**
+   * Cascade — one throw, many consequences.
+   *
+   * Built on chain depth: `minboom` 3 spares pairs, so the field keeps enough
+   * standing groups for a boom's debris to reach a second and a third; the
+   * larger ball and the longer roll carry that debris far enough to arrive; and
+   * the slower reload lets a cascade finish before the next throw lands on top
+   * of it. Measured over 40 seeds at 120s duel: 38% of throws reach eight
+   * scoring events, against 9% under Normal, at 12.5 booms a minute rather than
+   * Normal's 17.9. The trade is deliberate — fewer, longer events.
+   *
+   * `shotdecay` stays at its default on purpose. Raising it pays the late
+   * events of a long chain more, but those are mostly incidental debris
+   * contacts: at 0.85 the boom's share of the score *falls* from 37% to 25%,
+   * which rewards a ball wandering the table rather than the cascade itself.
+   */
+  cascade: {
+    id: 'cascade', label: 'Cascade',
+    knobs: {
+      match: 180, colours: 6, minboom: 3, size: 15, roll: 0.75, reload: 3.5, boom: 0.5,
+    },
+  },
+
+  /**
+   * Drift — a full, slow table.
+   *
+   * The gentle throw and the low speed cap mean balls arrive slowly and stay,
+   * so the field settles at 33 live balls against Normal's 17, and never once
+   * drops below the density line that triggers auto rain (0% of frames starved,
+   * against 13% under Normal and 27% under Chaos). Chains are long for the same
+   * reason — there is always something in the way — but booms are rare at 9.6 a
+   * minute, so the match clock is the longest of any preset.
+   */
+  drift: {
+    id: 'drift', label: 'Drift',
+    knobs: {
+      match: 240, colours: 6, kick: 0.6, speedcap: 1800, minboom: 3,
+    },
+  },
+
+  /**
+   * Rally — close matches that keep turning over.
+   *
+   * The quick reload puts roughly twice Normal's throws into a match, and
+   * `minboom` 3 keeps the table stocked while they land, so neither player runs
+   * out of material to play against. It changes hands 15.4 times a match to
+   * Normal's 9.2, and the half-time trailer recovers 102 ±25 points by the end
+   * — the only preset whose rubber banding clears twice its own standard error.
+   * It is what Chaos reaches for, without Chaos stripping the table bare: Chaos
+   * spends 27% of its match below the density line, Rally 5%.
+   */
+  rally: {
+    id: 'rally', label: 'Rally',
+    knobs: {
+      match: 120, colours: 6, reload: 2, minboom: 3, bounce: 0.9, boom: 0.45,
     },
   },
 };

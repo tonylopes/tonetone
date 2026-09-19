@@ -35,10 +35,18 @@ function fakeEl(id: string, type: string, value = ''): FakeEl {
   };
 }
 
+/**
+ * A gameplay knob no preset declares, for the "presets leave the rest alone"
+ * case. Derived rather than written down: this used to name `colours`, which the
+ * Cascade, Drift and Rally presets now set to 6, so the case silently became a
+ * test that a preset fails to apply one of its own knobs.
+ */
+const OUTSIDE_EVERY_PRESET = ['rain', 'spin', 'specials'].find(id => !PRESET_SPAN.includes(id))!;
+
 function mountPanel() {
   const els = new Map<string, FakeEl>();
   // Every knob a preset can touch, plus one it cannot, at its registry default.
-  for (const id of [...PRESET_SPAN, 'colours']) {
+  for (const id of [...PRESET_SPAN, OUTSIDE_EVERY_PRESET]) {
     els.set(id, fakeEl(id, 'range', String(KNOBS[id].default)));
     els.set(id + 'v', fakeEl(id + 'v', 'output'));
   }
@@ -106,10 +114,11 @@ describe('tuning panel preset picker', () => {
 
   it('leaves knobs outside every preset alone', () => {
     const { els, pick } = mountPanel();
-    els.get('colours')!.value = '5';
-    els.get('colours')!.fire('input');
+    const el = els.get(OUTSIDE_EVERY_PRESET)!;
+    el.value = '5';
+    el.fire('input');
     pick(PRESETS.chaos.label);
-    expect(els.get('colours')!.value).toBe('5');
+    expect(el.value).toBe('5');
   });
 
   it('says "modified" once a knob no longer matches the picked preset', () => {

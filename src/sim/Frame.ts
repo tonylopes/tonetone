@@ -41,14 +41,21 @@ export interface FrameResult {
   substeps: number;
   /** True if the match ended on this frame. */
   matchEnded: boolean;
-  /** True if any launcher fired this frame. */
-  launched: boolean;
   /**
-   * True if a launcher fired but the ball actually made it onto the field.
-   * A launcher can fire and still not throw when the bay is blocked by
-   * resting balls.
+   * Launchers that fired this frame — a bay whose reload had run down.
+   *
+   * A count rather than a flag: in a duel both bays can fire on the same frame,
+   * and a flag could only report that *someone* had. One player throwing while
+   * the other was blocked then read as a clean frame, which is how the blocked
+   * throws of player 2 went unmeasured.
    */
-  threw: boolean;
+  fired: number;
+  /**
+   * Fires that actually put a ball on the field. `fired - threw` is how many a
+   * blocked bay refused: a launcher can fire and still not throw when resting
+   * balls are sitting in front of it.
+   */
+  threw: number;
   /** True if a rain ball was requested on this frame. */
   rained: boolean;
 }
@@ -92,7 +99,7 @@ export function advanceFrame(
   hooks?: FrameHooks
 ): FrameResult {
   if (game.paused) {
-    return { clock, dt: 0, substeps: 0, matchEnded: false, launched: false, threw: false, rained: false };
+    return { clock, dt: 0, substeps: 0, matchEnded: false, fired: 0, threw: 0, rained: false };
   }
 
   const dt = normalizeDt(rawDt);
@@ -120,8 +127,8 @@ export function advanceFrame(
     aiAim(game.players[1], game.groups, game.balls, width, height, game.twoPlayer);
   }
 
-  let launched = false;
-  let threw = false;
+  let fired = 0;
+  let threw = 0;
   let rained = false;
 
   if (!game.matchOver) {
@@ -140,8 +147,8 @@ export function advanceFrame(
     const activePlayers = game.twoPlayer ? game.players : [game.players[0]];
     for (const p of activePlayers) {
       if (p.reload <= 0) {
-        launched = true;
-        if (throwBall(p, game, width, height)) threw = true;
+        fired++;
+        if (throwBall(p, game, width, height)) threw++;
       }
     }
   }
@@ -157,5 +164,5 @@ export function advanceFrame(
     }
   }
 
-  return { clock, dt, substeps, matchEnded, launched, threw, rained };
+  return { clock, dt, substeps, matchEnded, fired, threw, rained };
 }

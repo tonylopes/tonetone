@@ -10,7 +10,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import {
-  EXTRACTORS, Mode, PolicyName, RunResult, SimOptions,
+  EXTRACTORS, LONG_CHAIN, Mode, PolicyName, RunResult, SimOptions,
   extract, extractorNames, runMany, runSim,
 } from '../src/sim/Harness';
 import {
@@ -194,6 +194,11 @@ function fixed(v: number, places = 2): string {
   return Number.isFinite(v) ? v.toFixed(places) : String(v);
 }
 
+/** A 0..1 share as a percentage, for the rate metrics. */
+function pct(v: number, places = 1): string {
+  return fixed(v * 100, places) + '%';
+}
+
 /**
  * One estimate as `mean ± standard error`. Written out at four call sites before,
  * which is how `compare` and `sweep` came to print it three slightly different ways.
@@ -246,8 +251,18 @@ function cmdRun(args: Args): number {
         ['booms per minute', fixed(r.boomsPerMinute)],
         ['biggest boom', r.killBig],
         ['balls (avg / max / final)', `${fixed(r.ballsAvg, 1)} / ${r.ballsMax} / ${r.ballsFinal}`],
+        ['live balls (avg / min)', `${fixed(r.liveAvg, 1)} / ${r.liveMin}`],
+        ['starved (below rain line)', pct(r.starvedFrac)],
         ['largest group (avg / max)', `${fixed(r.groupAvg, 2)} / ${r.groupMax}`],
-        ['throws (fired / blocked)', `${r.throws} / ${r.blockedThrows}`],
+        ['chain depth (avg / best)', `${fixed(r.chainAvg, 2)} / ${r.chainBest}`],
+        [`long chains (>=${LONG_CHAIN} events)`, pct(r.chainLongFrac)],
+        ['throws (fired / blocked)', `${r.throws} / ${r.blockedThrows} (${pct(r.blockedFrac)})`],
+        ...(r.mode === 'duel' || r.mode === 'ai'
+          ? [
+              ['lead changes', String(r.leadChanges)],
+              ['catch-up', fixed(catchUp(r.halfTimeScores, r.finalScores), 1)],
+            ] as (string | number)[][]
+          : []),
         ['invariants', invariantLine(r)],
       ]
     );

@@ -176,10 +176,28 @@ export function resetField(game: Game, width?: number, height?: number) {
   }
 }
 
+/**
+ * How many live balls a field of this size wants before the rain stops.
+ *
+ * This is the game's own definition of "the table is getting empty", and it is
+ * what the auto rain cadence is driven by. The harness reads the same function
+ * to report how much of a match was spent starved, so a tuning preset cannot be
+ * judged against a density rule the game does not actually use.
+ */
+export function lowDensityThreshold(width: number, height: number): number {
+  return Math.max(14, Math.round((width * height) / 18000));
+}
+
+/** Live (non-ghost) balls on the field. Ghosts are debris, not playable material. */
+export function liveBallCount(game: Game): number {
+  let n = 0;
+  for (const b of game.balls) if (!b.ghost) n++;
+  return n;
+}
+
 export function isLowBallDensity(game: Game, width: number, height: number, stopThresholdMultiplier = 1.25): boolean {
-  const activeCount = game.balls.filter(b => !b.ghost).length;
-  const area = width * height;
-  const baseThreshold = Math.max(14, Math.round(area / 18000));
+  const activeCount = liveBallCount(game);
+  const baseThreshold = lowDensityThreshold(width, height);
   const targetThreshold = (game as any)._isRaining ? Math.round(baseThreshold * stopThresholdMultiplier) : baseThreshold;
   const raining = activeCount < targetThreshold;
   (game as any)._isRaining = raining;

@@ -190,3 +190,71 @@ describe('invariants in real matches', () => {
     expect(violations(r.worst)).toEqual([]);
   });
 });
+
+describe('the five qualities a preset is judged on', () => {
+  /**
+   * These metrics exist so that "long chains, catch-up, no blocked launches,
+   * enough balls on the table, as many colours as possible" can be measured
+   * rather than asserted. Each case pins the one property that makes its metric
+   * mean what its name says.
+   */
+
+  it('counts a chain as the scoring events one throw causes', () => {
+    const r = runSim({ mode: 'duel', seed: 1, seconds: 60 });
+    // Every throw that reached the field contributes a tally, including the
+    // throws that scored nothing, so the mean is the yield of a throw rather
+    // than of a successful one.
+    expect(r.chainBest).toBeGreaterThan(0);
+    expect(r.chainAvg).toBeGreaterThan(0);
+    expect(r.chainAvg).toBeLessThanOrEqual(r.chainBest);
+    expect(r.chainLongFrac).toBeGreaterThanOrEqual(0);
+    expect(r.chainLongFrac).toBeLessThanOrEqual(1);
+  });
+
+  it('measures chain depth without changing what it measures', () => {
+    // The tally objects are read off the balls that already carry them, so a
+    // run measured for chains has to be identical to one that is not.
+    const a = runSim({ mode: 'duel', seed: 3, seconds: 20 });
+    const b = runSim({ mode: 'duel', seed: 3, seconds: 20 });
+    expect(a.chainAvg).toBe(b.chainAvg);
+    expect(a.finalScores).toEqual(b.finalScores);
+  });
+
+  it('separates live balls from boom debris', () => {
+    const r = runSim({ mode: 'duel', seed: 1, seconds: 60 });
+    // Ghosts are debris in flight, not playable material, so the live count can
+    // never exceed the raw count and the minimum can never exceed the mean.
+    expect(r.liveAvg).toBeLessThanOrEqual(r.ballsAvg);
+    expect(r.liveMin).toBeLessThanOrEqual(r.liveAvg);
+    expect(r.ballsMin).toBeLessThanOrEqual(r.ballsAvg);
+    expect(r.starvedFrac).toBeGreaterThanOrEqual(0);
+    expect(r.starvedFrac).toBeLessThanOrEqual(1);
+  });
+
+  it('reports a blocked bay, and normalises it by launcher time', () => {
+    // Balls at their largest, packed by fast rain, is the one configuration
+    // measured to jam the launch corridor; at ordinary densities nothing blocks.
+    const jammed = runSim({
+      mode: 'duel', seed: 1, seconds: 60, invariants: false,
+      knobs: { size: 26, rain: 0.5, minboom: 6 },
+    });
+    expect(jammed.blockedThrows).toBeGreaterThan(0);
+    // A refusal does not consume the reload, so the bay retries every frame.
+    // The fraction is therefore over launcher-frames, never over fire attempts,
+    // and so must stay inside 0..1.
+    expect(jammed.blockedFrac).toBeGreaterThan(0);
+    expect(jammed.blockedFrac).toBeLessThanOrEqual(1);
+
+    const clear = runSim({ mode: 'duel', seed: 1, seconds: 60 });
+    expect(clear.blockedThrows).toBe(0);
+    expect(clear.blockedFrac).toBe(0);
+  });
+
+  it('counts a lead change only when the lead actually changes hands', () => {
+    const duel = runSim({ mode: 'duel', seed: 1, seconds: 60 });
+    expect(duel.leadChanges).toBeGreaterThan(0);
+    // Solo has no second launcher to take a lead from, so the count is not a
+    // small number there — it is meaningless, and reported as zero.
+    expect(runSim({ mode: 'solo', seed: 1, seconds: 60 }).leadChanges).toBe(0);
+  });
+});

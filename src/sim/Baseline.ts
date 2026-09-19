@@ -50,6 +50,11 @@ export function digest(r: RunResult): Record<string, number> {
     blockedThrows: r.blockedThrows,
     ballsAvg: round(r.ballsAvg, 4),
     ballsFinal: r.ballsFinal,
+    liveAvg: round(r.liveAvg, 4),
+    liveMin: r.liveMin,
+    starvedFrac: round(r.starvedFrac, 4),
+    chainAvg: round(r.chainAvg, 4),
+    chainBest: r.chainBest,
     groupAvg: round(r.groupAvg, 4),
     groupMax: r.groupMax,
     worstOverlap: round(r.worst.overlap, 6),
@@ -75,7 +80,11 @@ export interface BaselineFile {
   scenarios: BaselineEntry[];
 }
 
-export const BASELINE_VERSION = 1;
+/**
+ * 2: the digest gained the density and chain-depth metrics, and `blockedThrows`
+ * became a true per-launcher count rather than a per-frame flag.
+ */
+export const BASELINE_VERSION = 2;
 
 export function measureBaseline(scenarios = BASELINE_SCENARIOS): BaselineFile {
   return {

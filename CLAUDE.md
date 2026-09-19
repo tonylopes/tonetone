@@ -32,7 +32,7 @@ these strings verbatim when you query or set a value, and read them as:
 | :--- | :--- | :--- |
 | `Tarefa` | task title | free text — **write new ones in English** |
 | `Status` | status | `A fazer` (to do), `Fazendo` (doing), `Feito` (done) |
-| `Etapa` | stage | `Backlog` — the only option defined |
+| `Etapa` | stage | `Backlog`, `Release 1` |
 | `Prioridade` | priority | `Alta` (high), `Média` (medium), `Baixa` (low) |
 | `Prazo` | due date | date |
 
@@ -52,6 +52,7 @@ Per-subsystem pages, all children of the docs home:
 - [Tutorial: Design](https://app.notion.com/p/3dfdc052afb1817b855ed206c2e53a6d)
 - [Mobile Packaging (Capacitor)](https://app.notion.com/p/3dfdc052afb1816eac26ec3ade2d4425)
 - [Study: Screen Shapes and the Three Presets](https://app.notion.com/p/3e0dc052afb1811fa44def81f14a7d56)
+- [Study: Cascade, Drift and Rally](https://app.notion.com/p/3e0dc052afb1815fb4dbcbab7e183050)
 
 ## Verify changes with the simulation harness
 
@@ -67,7 +68,7 @@ That is the full gate for any change to `src/physics/`, `src/game/` or
 `src/sim/`. Run it before reporting a change as done. The individual gates:
 
 ```bash
-npm test               # unit tests (311), including the harness's own
+npm test               # unit tests (321), including the harness's own
 npm run sim:physics    # textbook solver results: momentum, energy, 90° separation
 npm run sim:invariants # geometric invariants on every frame of 10 scenarios
 npm run sim:baseline   # did this change alter how the game plays?
@@ -100,6 +101,12 @@ Knobs are declared once in [`src/sim/Knobs.ts`](src/sim/Knobs.ts) and consumed b
 both the tuning panel and the harness. Add or change a knob in **both** the
 registry and `index.html`; `tests/sim/Knobs.test.ts` fails if they disagree.
 
+The same file declares the presets — Normal, Relax, Chaos, Cascade, Drift and
+Rally. A preset is a set of differences from the registry defaults, and adding
+one means adding its `<option>` to `index.html` too. Anything a preset touches
+joins `PRESET_SPAN` and is therefore reset when a player picks a different
+preset, so putting a knob in a preset changes what switching presets does to it.
+
 Then measure it rather than describing it:
 
 ```bash
@@ -129,6 +136,12 @@ simulation that no longer exists.
 - Watch `mean boom size` next to `booms per minute`. A high rate of 2-ball
   booms is not the same game as occasional 9-ball booms, and the rate alone
   cannot tell them apart.
+- The same caution applies to the five preset-quality metrics — `chainAvg` and
+  `chainLongFrac` for chain depth, `blockedFrac` for refused launches,
+  `liveAvg` and `starvedFrac` for table density, `leadChanges` and `catchUp`
+  for how close a match stays. `blockedFrac` is normalised by launcher *time*,
+  not by fire attempts: a blocked bay retries every frame, so an attempt-based
+  figure overstates it several-fold.
 
 Full guide: the [Simulation Harness](https://app.notion.com/p/3dfdc052afb1812e8a39e1bbf59cbf71)
 page in Notion.
