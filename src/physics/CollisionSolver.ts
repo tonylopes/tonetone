@@ -2,7 +2,7 @@ import { Ball, Flash, Group, LauncherPlayer, Pop, Shot } from './Types';
 import { PhysicsConfig } from './Config';
 import { rebuildGroups, separateGroups, shiftGroup, syncGroup } from './RigidBody';
 import { clearExempt, mouthClamp, mouthCollide } from './LauncherBays';
-import { SHOT_DECAY, burstPay, lockPay, peelPay } from '../game/Rules';
+import { SHOT_DECAY, boomPay, lockPay, peelPay } from '../game/Rules';
 import { playNote, playKnock, playMagneticElectricSound } from '../audio/Voices';
 import { AudioStore } from '../audio/SynthEngine';
 
@@ -71,11 +71,54 @@ export function forEachPair(balls: Ball[], fn: (a: Ball, b: Ball) => void) {
 }
 
 /**
+ * How big a boom has to be to earn each word, largest first.
+ *
+ * The thresholds are the same five tiers the boom voice is synthesized in
+ * (`getBoomProps`), so the word on screen and the sound in the speakers
+ * step up together. A boom under 5 balls earns no word.
+ */
+export const BOOM_LABEL_TIERS: readonly (readonly [number, string])[] = [
+  [20, 'GIGA'],
+  [15, 'MEGA'],
+  [10, 'SUPER'],
+  [5, 'DOUBLE'],
+];
+
+/**
+ * The word beside a boom's points: a size tier, and BOOM! for a white-on-black hit.
+ *
+ * BOOM! is reserved for the white-on-black hit — the only way a black ball ever
+ * leaves the table, and the boom that already gets its own lifted boom. Every
+ * other boom shows its tier alone (`+7 DOUBLE`, `+13 SUPER`), so the loudest
+ * word in the game stays attached to its rarest event. The two compose: a
+ * white-on-black hit that takes 12 balls with it reads `+96 SUPER BOOM!`.
+ */
+export function boomLabel(count: number, whiteBlack: boolean): string {
+  const tier = BOOM_LABEL_TIERS.find(([min]) => count >= min);
+  const words = [];
+  if (tier) words.push(tier[1]);
+  if (whiteBlack) words.push('BOOM!');
+  return words.join(' ');
+}
+
+/** What a boom looked like, for the word on its pop. */
+export interface BoomShape {
+  count: number;
+  whiteBlack: boolean;
+}
+
+/** The text of a scoring pop: the points it paid, and what the boom earned. */
+export function popText(points: number, source?: 'lock' | 'boom' | 'peel', boom?: BoomShape): string {
+  const label = source === 'boom' && boom ? boomLabel(boom.count, boom.whiteBlack) : '';
+  return label ? '+' + points + ' ' + label : '+' + points;
+}
+
+/**
  * Pay `who` for one scoring event. When the event came from a throw, each
  * further event that throw causes pays SHOT_DECAY times the one before, so a
  * ball that keeps bumping into things does not keep earning full value.
  */
-export function award(state: CollisionState, who: number, points: number, x: number, y: number, source?: 'lock' | 'burst' | 'peel', shot?: Shot) {
+export function award(state: CollisionState, who: number, points: number, x: number, y: number, source?: 'lock' | 'boom' | 'peel', shot?: Shot, boom?: BoomShape) {
   if (!(who >= 0) || !state.players[who] || points <= 0) return;
   if (shot) {
     points = Math.round(points * Math.pow(SHOT_DECAY, shot.events));
@@ -86,19 +129,24 @@ export function award(state: CollisionState, who: number, points: number, x: num
   p.score += points;
   if (source) {
     if (source === 'lock') p.lockPts += points;
-    else if (source === 'burst') p.burstPts += points;
+    else if (source === 'boom') p.boomPts += points;
     else if (source === 'peel') p.peelPts += points;
   }
-  state.pops.push({ x, y, t: 0, text: '+' + points, who });
+  state.pops.push({ x, y, t: 0, text: popText(points, source, boom), who });
   if (state.pops.length > 40) state.pops.shift();
 }
 
-export function explode(state: CollisionState, g: Group, impact: number, credit?: number, payScale?: number, width?: number, isWhiteHit: boolean = false, shot?: Shot) {
+export function boomGroup(state: CollisionState, g: Group, impact: number, credit?: number, payScale?: number, width?: number, isWhiteHit: boolean = false, shot?: Shot) {
   const members = g.members.slice();
   if (!members.length) return;
 
   const destroyedMembers = isWhiteHit ? members : members.filter(b => b.special !== 'black');
   const survivingMembers = isWhiteHit ? [] : members.filter(b => b.special === 'black');
+  // Only a white ball destroys a black one, and only ever here: every other
+  // path filters blacks out of `destroyedMembers`. That boom gets its own voice,
+  // and the only BOOM! on the board. Computed here because both the pop text and
+  // the voice below need it.
+  const whiteBlack = isWhiteHit && destroyedMembers.some(b => b.special === 'black');
 
   if (!destroyedMembers.length) return;
 
@@ -110,12 +158,12 @@ export function explode(state: CollisionState, g: Group, impact: number, credit?
   const count = destroyedMembers.length;
   if (state.players[who]) {
     state.players[who].destroyed += count;
-    state.players[who].bursts++;
+    state.players[who].booms++;
   }
 
   let ax = 0, ay = 0;
   for (const b of destroyedMembers) { ax += b.x; ay += b.y; }
-  award(state, who, burstPay(count, payScale === undefined ? 1 : payScale), ax / count, ay / count, 'burst', shot);
+  award(state, who, boomPay(count, payScale === undefined ? 1 : payScale), ax / count, ay / count, 'boom', shot, { count, whiteBlack });
 
   for (const b of destroyedMembers) {
     for (const id of b.bonds) {
@@ -146,9 +194,11 @@ export function explode(state: CollisionState, g: Group, impact: number, credit?
   playNote(
     voice.kind < 0 ? 0.5 : voice.kind / 6,
     w ? (ax / n / w) * 2 - 1 : 0,
-    'burst',
+    'boom',
     Math.min(1.6, 0.7 + n * 0.09),
-    n
+    n,
+    false,
+    whiteBlack
   );
 
   for (const b of destroyedMembers) {
@@ -158,7 +208,7 @@ export function explode(state: CollisionState, g: Group, impact: number, credit?
       impact * (PhysicsConfig.GHOST_SPREAD_LO + Math.random() * (PhysicsConfig.GHOST_SPREAD_HI - PhysicsConfig.GHOST_SPREAD_LO))
     );
     if (Math.random() >= 0.1) {
-      sp = Math.min(sp, PhysicsConfig.SHATTER_SPEED * 0.95);
+      sp = Math.min(sp, PhysicsConfig.BOOM_SPEED * 0.95);
     }
     b.group.vx = Math.cos(dir) * sp;
     b.group.vy = Math.sin(dir) * sp;
@@ -306,7 +356,7 @@ export function collide(state: CollisionState, now: number, width: number) {
       if (!(a.ghost && b.ghost)) {
         const gh = a.ghost ? a : b, real = a.ghost ? b : a;
         // Debris only claims a live ball it pushes. A live ball that rolls into
-        // debris keeps its own credit instead of passing to whoever burst it.
+        // debris keeps its own credit instead of passing to whoever boomed it.
         const ghostPush = gh === a ? pushA : pushB, realPush = gh === a ? pushB : pushA;
         if (gh.credit >= 0 && ghostPush >= realPush) { real.credit = gh.credit; real.shot = gh.shot; }
         ghostHits.push({ gh, real, impact: -rvn });
@@ -355,7 +405,7 @@ export function collide(state: CollisionState, now: number, width: number) {
     const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
     if (!separateGroups(a.group, b.group, dx / d, dy / d)) continue;
     // A lock pays for the balls it adds (the smaller side of the merge), more
-    // the bigger the cluster they join (the larger side).
+    // the bigger the group they join (the larger side).
     const joined = Math.min(a.group.members.length, b.group.members.length);
     const target = Math.max(a.group.members.length, b.group.members.length);
     a.bonds.add(b.id); b.bonds.add(a.id);
@@ -363,12 +413,14 @@ export function collide(state: CollisionState, now: number, width: number) {
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
     const blacks = (a.special === 'black' ? 1 : 0) + (b.special === 'black' ? 1 : 0);
     const viaBlack = blacks > 0;
+    // Read after `rebuildGroups` above, so this is the merged group: the lock
+    // is scaled by what it produced, not by either side going into it.
+    const size = a.group.members.length;
     if (viaBlack) {
-      playMagneticElectricSound(width ? (mx / width) * 2 - 1 : 0);
+      playMagneticElectricSound(width ? (mx / width) * 2 - 1 : 0, false, blacks >= 2, size);
     } else {
       playNote(a.kind < 0 ? 0.5 : a.kind / 6, width ? (mx / width) * 2 - 1 : 0, 'bond');
     }
-    const size = a.group.members.length;
     if (state.players[bond.credit]) {
       state.players[bond.credit].locks++;
       state.players[bond.credit].best = Math.max(state.players[bond.credit].best, size);
@@ -379,8 +431,8 @@ export function collide(state: CollisionState, now: number, width: number) {
   for (const hit of breaks) {
     if (!hit.ball.bonds.size) continue;
     if (hit.ball.special === 'black') continue;
-    if (hit.impact >= PhysicsConfig.SHATTER_SPEED && hit.ball.group.members.length >= PhysicsConfig.MIN_BURST)
-      explode(state, hit.ball.group, hit.impact, hit.credit, 1, width, false, hit.shot);
+    if (hit.impact >= PhysicsConfig.BOOM_SPEED && hit.ball.group.members.length >= PhysicsConfig.MIN_BOOM)
+      boomGroup(state, hit.ball.group, hit.impact, hit.credit, 1, width, false, hit.shot);
     else detach(state, hit.ball, hit.impact, hit.credit, width, hit.shot);
   }
 
@@ -388,7 +440,7 @@ export function collide(state: CollisionState, now: number, width: number) {
     if (!state.byId.has(h.w.id) || !h.w.special) continue;
     const target = h.other.group;
     if (target && target.members.length && !h.other.ghost) {
-      explode(state, target, Math.max(PhysicsConfig.SHATTER_SPEED * 1.2, h.impact), h.w.credit, 1, width, true, h.w.shot);
+      boomGroup(state, target, Math.max(PhysicsConfig.BOOM_SPEED * 1.2, h.impact), h.w.credit, 1, width, true, h.w.shot);
     }
     h.w.special = null;
     h.w.ghost = true;
@@ -406,8 +458,8 @@ export function collide(state: CollisionState, now: number, width: number) {
       state.flashes.push({ x: h.gh.x, y: h.gh.y, t: 0, kind: 'spawn' });
       if (h.gh.pure || (h.gh.kind !== h.real.kind && h.real.bonds.size)) {
         if (h.real.special === 'black' && !h.gh.pure) continue;
-        if (h.gh.pure || (h.impact >= PhysicsConfig.SHATTER_SPEED && h.real.group.members.length >= PhysicsConfig.MIN_BURST))
-          explode(state, h.real.group, Math.max(PhysicsConfig.SHATTER_SPEED, h.impact), h.gh.credit, 1, width, h.gh.pure, h.gh.shot);
+        if (h.gh.pure || (h.impact >= PhysicsConfig.BOOM_SPEED && h.real.group.members.length >= PhysicsConfig.MIN_BOOM))
+          boomGroup(state, h.real.group, Math.max(PhysicsConfig.BOOM_SPEED, h.impact), h.gh.credit, 1, width, h.gh.pure, h.gh.shot);
         else detach(state, h.real, h.impact, undefined, width);
       }
     }

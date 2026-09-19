@@ -9,7 +9,7 @@ import {
   fits,
   spawn,
   spawnRainBall,
-  spawnBallCluster,
+  spawnBallGroup,
   getRainBallAlpha,
   isLowBallDensity,
   launchSpot,
@@ -69,7 +69,7 @@ describe('GameState module', () => {
     });
   });
 
-  describe('resetField & spawnBallCluster', () => {
+  describe('resetField & spawnBallGroup', () => {
     it('resets game field entities and populates launcher decks when dimensions not provided', () => {
       const game = createGame();
       game.rainTimer = 5;
@@ -231,7 +231,7 @@ describe('GameState module', () => {
       expect(success).toBe(false);
     });
 
-    it('bursts target ball clusters when thrown with sufficient strength in single player mode', () => {
+    it('booms target ball groups when thrown with sufficient strength in single player mode', () => {
       const game = createGame();
       game.twoPlayer = false;
       resetField(game);
@@ -246,7 +246,7 @@ describe('GameState module', () => {
       // Load player 0 with a red (kind = 0) ball
       const p = game.players[0];
       p.loaded = { kind: 0, color: '#E6194B', special: null };
-      p.strength = 0.8; // High strength above burst threshold
+      p.strength = 0.8; // High strength above boom threshold
       p.aimDeg = 0; // Aiming straight up toward (400, 300)
 
       const success = throwBall(p, game, 800, 600);
@@ -259,8 +259,8 @@ describe('GameState module', () => {
       }
       syncFromCollisionState(game, colState);
 
-      // Verify player 0 successfully burst the target cluster
-      expect(p.bursts).toBe(1);
+      // Verify player 0 successfully boom the target group
+      expect(p.booms).toBe(1);
       expect(game.killGroups).toBe(1);
     });
   });

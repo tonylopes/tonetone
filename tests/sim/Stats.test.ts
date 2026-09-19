@@ -67,29 +67,29 @@ describe('baseline diffing', () => {
   });
 
   it('reports nothing when the numbers match exactly', () => {
-    expect(diffBaseline(file({ bursts: 10 }), file({ bursts: 10 }))).toEqual([]);
+    expect(diffBaseline(file({ booms: 10 }), file({ booms: 10 }))).toEqual([]);
   });
 
   it('reports any movement at zero tolerance', () => {
-    const rows = diffBaseline(file({ bursts: 10 }), file({ bursts: 11 }));
+    const rows = diffBaseline(file({ booms: 10 }), file({ booms: 11 }));
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ metric: 'bursts', before: 10, after: 11, delta: 1, percent: 10, within: false });
+    expect(rows[0]).toMatchObject({ metric: 'booms', before: 10, after: 11, delta: 1, percent: 10, within: false });
   });
 
   it('accepts movement inside an explicit tolerance', () => {
-    const rows = diffBaseline(file({ bursts: 100 }), file({ bursts: 105 }), 10);
+    const rows = diffBaseline(file({ booms: 100 }), file({ booms: 105 }), 10);
     expect(rows[0].within).toBe(true);
   });
 
   it('flags a scenario that disappeared', () => {
-    const saved = file({ bursts: 1 });
+    const saved = file({ booms: 1 });
     const fresh: BaselineFile = { version: BASELINE_VERSION, created: 'test', scenarios: [] };
     expect(diffBaseline(saved, fresh)[0].within).toBe(false);
   });
 
   it('digests a real run into comparable numbers', () => {
     const d = digest(runSim({ seconds: 10, seed: 1, mode: 'solo' }));
-    expect(Object.keys(d)).toContain('bursts');
+    expect(Object.keys(d)).toContain('booms');
     expect(Object.keys(d)).toContain('worstOverlap');
     for (const [k, v] of Object.entries(d)) expect(Number.isFinite(v), k).toBe(true);
   });

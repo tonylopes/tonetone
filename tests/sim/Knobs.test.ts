@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  KNOBS, applyKnobDefaults, applyKnobs, knobIds, parseKnobValue,
-  readKnobs, restoreConfig, snapshotConfig,
+  DEFAULT_PRESET, KNOBS, PRESETS, PRESET_SPAN, applyKnobDefaults, applyKnobs, applyPreset,
+  knobIds, parseKnobValue, presetIds, presetKnobs, presetMatching, readKnobs,
+  restoreConfig, snapshotConfig,
 } from '../../src/sim/Knobs';
 import { createGame } from '../../src/game/GameState';
 import { PhysicsConfig } from '../../src/physics/Config';
@@ -41,11 +42,23 @@ function markupKnobs(): Record<string, Record<string, string>> {
     out[id[1]] = d;
   }
 
-  for (const m of src.matchAll(/<select\s+id="([\w-]+)"\s*>([\s\S]*?)<\/select>/g)) {
+  for (const m of src.matchAll(/<select\s+([^>]*)>([\s\S]*?)<\/select>/g)) {
+    const id = /id="([\w-]+)"/.exec(m[1]);
+    if (!id) continue;
+    // The preset picker lives in the panel but is not a knob: it *sets* knobs.
+    // `preset controls` below holds it to the PRESETS registry the same way.
+    if (id[1] === 'preset') continue;
     const options = [...m[2].matchAll(/<option>([^<]*)<\/option>/g)].map(o => o[1].trim());
-    out[m[1]] = { kind: 'select', options: options.join('|'), value: options[0] };
+    out[id[1]] = { kind: 'select', options: options.join('|'), value: options[0] };
   }
   return out;
+}
+
+function markupPresetOptions(): string[] {
+  const src = panelMarkup();
+  const m = /<select\s+id="preset"[^>]*>([\s\S]*?)<\/select>/.exec(src);
+  expect(m, 'index.html has no #preset select in the panel').not.toBeNull();
+  return [...m![1].matchAll(/<option>([^<]*)<\/option>/g)].map(o => o[1].trim());
 }
 
 describe('knob registry', () => {
@@ -88,7 +101,7 @@ describe('knob application', () => {
       applyKnobDefaults({ game: createGame(), height: 620 });
       expect(PhysicsConfig.REST).toBe(KNOBS.bounce.default);
       // bounce drives the wall restitution too, at 80% of ball-on-ball.
-      expect(PhysicsConfig.REST_WALL).toBeCloseTo(0.94 * 0.8, 10);
+      expect(PhysicsConfig.REST_WALL).toBeCloseTo((KNOBS.bounce.default as number) * 0.8, 10);
     } finally {
       restoreConfig(snap);
     }
@@ -99,10 +112,10 @@ describe('knob application', () => {
     try {
       const ctx = { game: createGame(), height: 620 };
       applyKnobDefaults(ctx);
-      applyKnobs({ burst: 0.8, minburst: 4, rain: 2.5 }, ctx);
+      applyKnobs({ boom: 0.8, minboom: 4, rain: 2.5 }, ctx);
       const read = readKnobs(ctx);
-      expect(read.burst).toBe(0.8);
-      expect(read.minburst).toBe(4);
+      expect(read.boom).toBe(0.8);
+      expect(read.minboom).toBe(4);
       expect(read.rain).toBe(2.5);
     } finally {
       restoreConfig(snap);
@@ -114,10 +127,10 @@ describe('knob application', () => {
     try {
       const ctx = { game: createGame(), height: 620 };
       applyKnobDefaults(ctx);
-      const before = PhysicsConfig.SHATTER_SPEED;
-      applyKnobs({ burst: 1.0 }, ctx);
-      expect(PhysicsConfig.SHATTER_SPEED).not.toBe(before);
-      expect(PhysicsConfig.SHATTER_SPEED).toBeCloseTo(PhysicsConfig.THROW_MAX * PhysicsConfig.SC, 6);
+      const before = PhysicsConfig.BOOM_SPEED;
+      applyKnobs({ boom: 1.0 }, ctx);
+      expect(PhysicsConfig.BOOM_SPEED).not.toBe(before);
+      expect(PhysicsConfig.BOOM_SPEED).toBeCloseTo(PhysicsConfig.THROW_MAX * PhysicsConfig.SC, 6);
     } finally {
       restoreConfig(snap);
     }
@@ -138,10 +151,83 @@ describe('knob application', () => {
   });
 
   it('rejects values outside the slider range a player can reach', () => {
-    expect(() => parseKnobValue('burst', '5')).toThrow(/above its maximum/);
-    expect(() => parseKnobValue('burst', '0')).toThrow(/below its minimum/);
-    expect(() => parseKnobValue('burst', 'loud')).toThrow(/needs a number/);
+    expect(() => parseKnobValue('boom', '5')).toThrow(/above its maximum/);
+    expect(() => parseKnobValue('boom', '0')).toThrow(/below its minimum/);
+    expect(() => parseKnobValue('boom', 'loud')).toThrow(/needs a number/);
     expect(() => parseKnobValue('scale', 'Lydian')).toThrow(/must be one of/);
-    expect(parseKnobValue('burst', '0.55')).toBe(0.55);
+    expect(parseKnobValue('boom', '0.55')).toBe(0.55);
+  });
+});
+
+describe('preset controls', () => {
+  it('offers exactly the presets the registry declares, in the same order', () => {
+    expect(markupPresetOptions()).toEqual(Object.values(PRESETS).map(p => p.label));
+  });
+
+  it('opens on the default preset, which a bare <select> takes from its first option', () => {
+    expect(markupPresetOptions()[0]).toBe(PRESETS[DEFAULT_PRESET].label);
+  });
+
+  it('defines the default preset as the registry defaults themselves', () => {
+    // If `normal` ever grows an override, the panel and the harness would start
+    // from different games: the markup ships the defaults, not the preset.
+    expect(PRESETS[DEFAULT_PRESET].knobs).toEqual({});
+    for (const id of PRESET_SPAN) {
+      expect(presetKnobs(DEFAULT_PRESET)[id], `${id} in the default preset`).toBe(KNOBS[id].default);
+    }
+  });
+
+  it('keeps every preset value inside the range a player can reach', () => {
+    for (const id of presetIds()) {
+      for (const [knobId, value] of Object.entries(PRESETS[id].knobs)) {
+        expect(() => parseKnobValue(knobId, String(value)), `${id}.${knobId}`).not.toThrow();
+      }
+    }
+  });
+
+  it('never lets a preset touch an audio or cosmetic knob', () => {
+    // Picking Chaos must not reset someone's volume or their ball numbers.
+    for (const id of PRESET_SPAN) {
+      expect(KNOBS[id].cosmetic ?? false, `${id} is cosmetic`).toBe(false);
+      expect(KNOBS[id].group, `${id} group`).not.toBe('audio');
+    }
+  });
+
+  it('spans exactly the knobs the presets mention', () => {
+    const mentioned = new Set<string>();
+    for (const id of presetIds()) for (const k of Object.keys(PRESETS[id].knobs)) mentioned.add(k);
+    expect([...PRESET_SPAN].sort()).toEqual([...mentioned].sort());
+  });
+
+  it('undoes the previous preset instead of layering on top of it', () => {
+    const snap = snapshotConfig();
+    try {
+      const ctx = { game: createGame(), height: 620 };
+      applyKnobDefaults(ctx);
+      applyPreset('relax', ctx);
+      expect(PhysicsConfig.MIN_BOOM).toBe(3);
+      // `minboom` is a relax override that chaos does not mention, so it has to
+      // come back to its default when chaos is picked.
+      applyPreset('chaos', ctx);
+      expect(PhysicsConfig.MIN_BOOM).toBe(KNOBS.minboom.default);
+      expect(PhysicsConfig.DRAG).toBe(0.75);
+      applyPreset('normal', ctx);
+      expect(PhysicsConfig.DRAG).toBe(KNOBS.roll.default);
+      expect(PhysicsConfig.REST).toBe(KNOBS.bounce.default);
+    } finally {
+      restoreConfig(snap);
+    }
+  });
+
+  it('recognises its own presets and reports a nudged knob as no preset at all', () => {
+    for (const id of presetIds()) {
+      expect(presetMatching(presetKnobs(id))).toBe(id);
+    }
+    const nudged = { ...presetKnobs('relax'), reload: 2.5 };
+    expect(presetMatching(nudged)).toBeNull();
+  });
+
+  it('rejects an unknown preset rather than silently falling back', () => {
+    expect(() => applyPreset('nonesuch', { game: createGame(), height: 620 })).toThrow(/Unknown preset/);
   });
 });

@@ -36,10 +36,10 @@ export const BASELINE_SCENARIOS: BaselineScenario[] = [
 /** The numbers a baseline records for each scenario. */
 export function digest(r: RunResult): Record<string, number> {
   return {
-    bursts: r.killGroups,
+    booms: r.killGroups,
     ballsDestroyed: r.killBalls,
-    biggestBurst: r.killBig,
-    burstSize: round(r.burstSize, 4),
+    biggestBoom: r.killBig,
+    boomSize: round(r.boomSize, 4),
     p1score: r.players[0].score,
     p2score: r.players[1].score,
     p1locks: r.players[0].locks,
@@ -50,8 +50,8 @@ export function digest(r: RunResult): Record<string, number> {
     blockedThrows: r.blockedThrows,
     ballsAvg: round(r.ballsAvg, 4),
     ballsFinal: r.ballsFinal,
-    clusterAvg: round(r.clusterAvg, 4),
-    clusterMax: r.clusterMax,
+    groupAvg: round(r.groupAvg, 4),
+    groupMax: r.groupMax,
     worstOverlap: round(r.worst.overlap, 6),
     worstFrozen: round(r.worst.frozen, 9),
     worstOutside: round(r.worst.outside, 6),

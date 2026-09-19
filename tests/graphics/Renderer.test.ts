@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { drawScores, drawPops, drawOneLauncher, RenderContext, P_COLOR } from '../../src/graphics/Renderer';
+import { drawScores, drawPops, drawOneLauncher, popCenterX, POP_EDGE_PAD, RenderContext, P_COLOR } from '../../src/graphics/Renderer';
 import { createGame } from '../../src/game/GameState';
 
 function createMockContext() {
@@ -22,6 +22,8 @@ function createMockContext() {
     fillText: vi.fn((text: string, x: number, y: number) => {
       fillTextCalls.push({ text, x, y });
     }),
+    // Stand-in for real text metrics: 10px a character, so widths are predictable.
+    measureText: vi.fn((text: string) => ({ width: text.length * 10 })),
   } as unknown as CanvasRenderingContext2D;
 
   return { ctx, fillTextCalls };
@@ -78,6 +80,49 @@ describe('Renderer module - drawPops', () => {
     expect(fillTextCalls[0].text).toBe('+15');
     expect(fillTextCalls[1].text).toBe('+30');
     expect(ctx.fillStyle).toBe(P_COLOR[1]); // last drawn item set fillStyle to P_COLOR[1]
+  });
+
+  it('slides a pop earned against a side wall back onto the screen', () => {
+    const { ctx } = createMockContext();
+    const rc: RenderContext = {
+      cv: {} as any,
+      ctx,
+      bg: {} as any,
+      bgx: {} as any,
+      W: 400,
+      H: 900,
+      bgW: 100,
+      bgH: 100,
+    };
+
+    const game = createGame();
+    // '+120 BOOM' is 9 characters, so 90px wide under the mock's metrics.
+    game.pops = [
+      { x: 2, y: 200, t: 0, text: '+120 BOOM', who: 0 },
+      { x: 398, y: 300, t: 0, text: '+120 BOOM', who: 0 },
+      { x: 200, y: 400, t: 0, text: '+120 BOOM', who: 0 },
+    ];
+
+    drawPops(rc, game);
+
+    const xs = (ctx.translate as any).mock.calls.map((c: number[]) => c[0]);
+    expect(xs[0]).toBe(45 + POP_EDGE_PAD); // pushed right off the left wall
+    expect(xs[1]).toBe(400 - 45 - POP_EDGE_PAD); // pushed left off the right wall
+    expect(xs[2]).toBe(200); // comfortably inside, left where it was earned
+  });
+});
+
+describe('Renderer module - popCenterX', () => {
+  it('keeps the whole label inside the canvas, padded from both edges', () => {
+    expect(popCenterX(200, 90, 400)).toBe(200);
+    expect(popCenterX(0, 90, 400)).toBe(45 + POP_EDGE_PAD);
+    expect(popCenterX(400, 90, 400)).toBe(400 - 45 - POP_EDGE_PAD);
+  });
+
+  it('centres a label too wide to fit rather than clamping it off one edge', () => {
+    // Both bounds cross once the text is wider than the canvas; centring at
+    // least clips it evenly instead of pinning it hard against one wall.
+    expect(popCenterX(10, 500, 400)).toBe(200);
   });
 });
 
@@ -137,7 +182,7 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
     const p = game.players[0];
     p.reload = 0;
 
-    // Test low strength (non-burst)
+    // Test low strength (non-boom)
     p.strength = 0.2;
     drawOneLauncher(rc, game, p, 0);
 
@@ -147,13 +192,13 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
     const lowWidth = lineWidths[lineWidths.length - 1];
     expect(lowWidth).toBeCloseTo(3.1); // 2.5 + 0.2 * 3 = 3.1
 
-    // Test high strength (burst mode)
+    // Test high strength (boom mode)
     p.strength = 0.9;
     drawOneLauncher(rc, game, p, 0);
 
     const highStrokes = strokeStyles.slice(-2);
     expect(highStrokes[0]).toBe(highStrokes[1]); // Dotted line & arrow share identical color
-    expect(highStrokes[0]).toContain('rgba(255,26,217,'); // Burst magenta color
+    expect(highStrokes[0]).toContain('rgba(255,26,217,'); // Boom magenta color
     const highWidth = lineWidths[lineWidths.length - 1];
     expect(highWidth).toBeCloseTo(5.2); // 2.5 + 0.9 * 3 = 5.2
 

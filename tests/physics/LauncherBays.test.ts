@@ -66,21 +66,43 @@ describe('LauncherBays module', () => {
     });
 
     it('calculates aimMaxReach to stay within the player playing area boundary', () => {
-      expect(aimMaxReach(600, true)).toBe(600 / 2 - bayInset()); // 300 - 38 = 262
-      expect(aimMaxReach(600, false)).toBe(600 - bayInset()); // 600 - 38 = 562
+      // Wide enough that the height is the tighter of the two bounds.
+      expect(aimMaxReach(2000, 600, true)).toBe(600 / 2 - bayInset()); // 300 - 38 = 262
+      expect(aimMaxReach(2000, 600, false)).toBe(600 - bayInset()); // 600 - 38 = 562
     });
 
-    it('calculates reach based on strength with extension past finger point', () => {
+    it('caps aimMaxReach at half the width so the arrow stays on a portrait screen', () => {
+      // A phone in portrait: the bay sits on the centre line and sweeps 180°, so
+      // half the width, not the height, is what the arrow has to fit inside.
+      expect(aimMaxReach(400, 900, false)).toBe(200); // 200 < 900 - 38
+      expect(aimMaxReach(400, 900, true)).toBe(200); // 200 < 450 - 38
+    });
+
+    it('grows reach with strength, scaled to the round limit', () => {
       const p = makeLauncher(1);
       p.strength = 0.5;
-      expect(aimReachOf(p, 600, false)).toBeCloseTo(0.5 * 600 * 0.80 * 1.75);
+      const maxReach = aimMaxReach(2000, 600, false); // 562
+      expect(aimReachOf(p, 2000, 600, false)).toBeCloseTo(0.5 * maxReach * 1.5);
+    });
+
+    it('saturates two thirds up the strength range whatever the screen shape', () => {
+      const p = makeLauncher(1);
+      // Portrait, where the width bounds the limit, and landscape, where the
+      // height does. The arrow has to reach full length at the same strength.
+      for (const [W, H] of [[400, 900], [1200, 600]]) {
+        const maxReach = aimMaxReach(W, H, false);
+        p.strength = 0.66;
+        expect(aimReachOf(p, W, H, false)).toBeLessThan(maxReach);
+        p.strength = 0.67;
+        expect(aimReachOf(p, W, H, false)).toBe(maxReach);
+      }
     });
 
     it('caps reach in 2-player mode so arrow head does not cross the playing area boundary', () => {
       const p = makeLauncher(1);
       p.strength = 1.0;
-      const reach = aimReachOf(p, 600, true);
-      const expectedMaxReach = aimMaxReach(600, true); // 300 - 38 = 262
+      const reach = aimReachOf(p, 2000, 600, true);
+      const expectedMaxReach = aimMaxReach(2000, 600, true); // 300 - 38 = 262
       expect(reach).toBe(expectedMaxReach);
       // Uncapped reach would be 1.0 * (600 * 0.40) * 1.75 = 420, which exceeds expectedMaxReach (262)
       expect(1.0 * (600 * 0.40) * 1.75).toBeGreaterThan(expectedMaxReach);
@@ -89,9 +111,31 @@ describe('LauncherBays module', () => {
     it('caps reach in 1-player mode so arrow head does not cross the top table boundary', () => {
       const p = makeLauncher(1);
       p.strength = 1.0;
-      const reach = aimReachOf(p, 600, false);
-      const expectedMaxReach = aimMaxReach(600, false); // 600 - 38 = 562
+      const reach = aimReachOf(p, 2000, 600, false);
+      const expectedMaxReach = aimMaxReach(2000, 600, false); // 600 - 38 = 562
       expect(reach).toBe(expectedMaxReach);
+    });
+
+    it('keeps the arrow tip on screen at every aim angle a player can reach', () => {
+      const W = 400, H = 900; // portrait, where the old height-only bound overshot
+      for (const twoPlayer of [false, true]) {
+        for (const side of [1, -1]) {
+          const p = makeLauncher(side);
+          p.strength = 1.0;
+          const m = launchPointOf(p, W, H);
+          const reach = aimReachOf(p, W, H, twoPlayer);
+          for (let deg = -90; deg <= 90; deg += 5) {
+            p.aimDeg = deg;
+            const dir = aimDirOf(p);
+            const tx = m.x + Math.cos(dir) * reach;
+            const ty = m.y + Math.sin(dir) * reach;
+            expect(tx).toBeGreaterThanOrEqual(0);
+            expect(tx).toBeLessThanOrEqual(W);
+            expect(ty).toBeGreaterThanOrEqual(0);
+            expect(ty).toBeLessThanOrEqual(H);
+          }
+        }
+      }
     });
   });
 
@@ -128,7 +172,7 @@ describe('LauncherBays module', () => {
       expect(minSpeed).toBeCloseTo(PhysicsConfig.THROW_MIN * PhysicsConfig.DUEL_POWER);
     });
 
-    it('consistently applies power multiplier across 1P and 2P modes to enable bursting', () => {
+    it('consistently applies power multiplier across 1P and 2P modes to enable booming', () => {
       const p = makeLauncher(1);
       p.strength = 1.0;
       const speed1P = throwSpeedOf(p, false);
@@ -137,11 +181,11 @@ describe('LauncherBays module', () => {
       expect(speed1P).toBe(PhysicsConfig.THROW_MAX * PhysicsConfig.DUEL_POWER);
     });
 
-    it('ensures single player shots at burst threshold exceed shatter speed', () => {
+    it('ensures single player shots at the boom threshold exceed boom speed', () => {
       const p = makeLauncher(1);
-      p.strength = PhysicsConfig.BURST_AT;
+      p.strength = PhysicsConfig.BOOM_AT;
       const speedAtThreshold = throwSpeedOf(p, false);
-      expect(speedAtThreshold).toBeGreaterThanOrEqual(PhysicsConfig.SHATTER_SPEED);
+      expect(speedAtThreshold).toBeGreaterThanOrEqual(PhysicsConfig.BOOM_SPEED);
     });
   });
 

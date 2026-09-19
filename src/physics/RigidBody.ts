@@ -45,7 +45,7 @@ export function shiftGroup(g: Group, dx: number, dy: number) {
 
 export function rebuildGroups(balls: Ball[], byId: Map<number, Ball>): Group[] {
   // One pass per group, not one per member. `balls.map(b => b.group)` lists a
-  // group once for every ball in it, so an N-ball cluster used to re-derive the
+  // group once for every ball in it, so an N-ball group used to re-derive the
   // same N member velocities N times — O(N^2) of byte-identical writes.
   const carried = new Set<Group>();
   for (const b of balls) {

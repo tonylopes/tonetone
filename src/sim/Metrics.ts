@@ -16,7 +16,7 @@ export interface Invariants {
    *
    * Balls still fading in are excluded, because the collider excludes them too:
    * a rain ball is intangible for its first second and is *expected* to appear
-   * inside a resting cluster. Measuring those pairs reports a design feature as
+   * inside a resting group. Measuring those pairs reports a design feature as
    * a violation — they routinely reach 22px, and drown out the 0.02px signal
    * that actually matters.
    */
@@ -103,11 +103,11 @@ export interface Sample {
   balls: number;
   ghosts: number;
   groups: number;
-  /** Size of the largest bonded cluster currently on the field. */
-  maxCluster: number;
-  /** Mean size of clusters of 2 or more. */
-  avgCluster: number;
-  /** Balls that are part of some cluster of 2 or more. */
+  /** Size of the largest bonded group currently on the field. */
+  maxGroup: number;
+  /** Mean size of groups of 2 or more. */
+  avgGroup: number;
+  /** Balls that are part of some group of 2 or more. */
   bonded: number;
   scores: [number, number];
   invariants: Invariants;
@@ -117,11 +117,11 @@ export function sampleField(game: Game, t: number, inv: Invariants): Sample {
   let ghosts = 0;
   for (const b of game.balls) if (b.ghost) ghosts++;
 
-  let maxCluster = 0, clusterCount = 0, clusterBalls = 0;
+  let maxGroup = 0, groupCount = 0, groupBalls = 0;
   for (const g of game.groups) {
     const n = g.members.length;
-    if (n > maxCluster) maxCluster = n;
-    if (n >= 2) { clusterCount++; clusterBalls += n; }
+    if (n > maxGroup) maxGroup = n;
+    if (n >= 2) { groupCount++; groupBalls += n; }
   }
 
   return {
@@ -129,9 +129,9 @@ export function sampleField(game: Game, t: number, inv: Invariants): Sample {
     balls: game.balls.length,
     ghosts,
     groups: game.groups.length,
-    maxCluster,
-    avgCluster: clusterCount ? clusterBalls / clusterCount : 0,
-    bonded: clusterBalls,
+    maxGroup,
+    avgGroup: groupCount ? groupBalls / groupCount : 0,
+    bonded: groupBalls,
     scores: [game.players[0].score, game.players[1].score],
     invariants: inv,
   };
@@ -141,12 +141,12 @@ export function sampleField(game: Game, t: number, inv: Invariants): Sample {
 export interface PlayerTotals {
   score: number;
   locks: number;
-  bursts: number;
+  booms: number;
   peels: number;
   destroyed: number;
   best: number;
   lockPts: number;
-  burstPts: number;
+  boomPts: number;
   peelPts: number;
 }
 
@@ -155,12 +155,12 @@ export function playerTotals(game: Game, index: number): PlayerTotals {
   return {
     score: p.score,
     locks: p.locks,
-    bursts: p.bursts,
+    booms: p.booms,
     peels: p.peels,
     destroyed: p.destroyed,
     best: p.best,
     lockPts: p.lockPts,
-    burstPts: p.burstPts,
+    boomPts: p.boomPts,
     peelPts: p.peelPts,
   };
 }

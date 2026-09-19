@@ -2,7 +2,56 @@
 
 A physics-based arcade billiards game: TypeScript + Vite, Canvas 2D and Web Audio
 hand-written with no game-logic dependencies, packaged for iOS/Android via
-Capacitor. Start at [`docs/design_overview.md`](docs/design_overview.md).
+Capacitor.
+
+## Documentation and tasks live in Notion, not in this repo
+
+**This repository holds code, tests and the simulation harness. It does not hold
+the documentation.** Notion is the only home for it: read the pages there before
+changing a subsystem, and write any documentation you produce there rather than
+adding a Markdown file here.
+
+- **Docs home:** [Documentation](https://app.notion.com/p/3dfdc052afb181d890bbcc0aa14c0ace)
+  — start at [Design Overview](https://app.notion.com/p/3dfdc052afb1815d89a1c285532baf68),
+  which indexes the rest.
+- **Project page:** [Tone Boom](https://app.notion.com/p/3dfdc052afb181719a60ef22a9610f6a),
+  reached through `Projetos → Lista de projetos` in the workspace tree.
+- **Tasks:** [Tarefas](https://app.notion.com/p/0f7d38ac1500470ca06317c9ae60c0a5)
+  (data source `collection://9d78920b-ec05-401e-bec1-7aeab7bfcaab`), an inline
+  database on the project page. It belongs to Tone Boom alone — **not** the shared
+  `Projetos → Tarefas` database — so every row is already a Tone Boom task and
+  there is no project relation to filter by.
+
+**Write in English** — documentation, task titles, page content, commit messages.
+Everything Tone Boom owns is already English.
+
+The field and option names are Portuguese, matching the rest of the workspace. Use
+these strings verbatim when you query or set a value, and read them as:
+
+| Field | Means | Values |
+| :--- | :--- | :--- |
+| `Tarefa` | task title | free text — **write new ones in English** |
+| `Status` | status | `A fazer` (to do), `Fazendo` (doing), `Feito` (done) |
+| `Etapa` | stage | `Backlog` — the only option defined |
+| `Prioridade` | priority | `Alta` (high), `Média` (medium), `Baixa` (low) |
+| `Prazo` | due date | date |
+
+When you finish a piece of work, update the matching Notion task and the affected
+doc page in the same pass as the code. A code change that silently leaves the
+Notion page describing the old behaviour is not finished.
+
+Per-subsystem pages, all children of the docs home:
+
+- [Game Mechanics & Rules](https://app.notion.com/p/3dfdc052afb1816187a3f69be3475c2d)
+- [Scoring](https://app.notion.com/p/3dfdc052afb181749c21c88a259f161c)
+- [Physics & Rigid-Body Engine](https://app.notion.com/p/3dfdc052afb1817abe5ac05dea57a117)
+- [Procedural Web Audio Engine](https://app.notion.com/p/3dfdc052afb181e69d54d1ee15adb344)
+- [Rendering & Visual Effects](https://app.notion.com/p/3dfdc052afb1816fb7acd41dbdde24c0)
+- [User Interface & Tuning Panel](https://app.notion.com/p/3dfdc052afb181bd95abd740289ffed7)
+- [Simulation Harness](https://app.notion.com/p/3dfdc052afb1812e8a39e1bbf59cbf71)
+- [Tutorial: Design](https://app.notion.com/p/3dfdc052afb1817b855ed206c2e53a6d)
+- [Mobile Packaging (Capacitor)](https://app.notion.com/p/3dfdc052afb1816eac26ec3ade2d4425)
+- [Study: Screen Shapes and the Three Presets](https://app.notion.com/p/3e0dc052afb1811fa44def81f14a7d56)
 
 ## Verify changes with the simulation harness
 
@@ -18,7 +67,7 @@ That is the full gate for any change to `src/physics/`, `src/game/` or
 `src/sim/`. Run it before reporting a change as done. The individual gates:
 
 ```bash
-npm test               # unit tests (182), including the harness's own
+npm test               # unit tests (311), including the harness's own
 npm run sim:physics    # textbook solver results: momentum, energy, 90° separation
 npm run sim:invariants # geometric invariants on every frame of 10 scenarios
 npm run sim:baseline   # did this change alter how the game plays?
@@ -74,16 +123,15 @@ simulation that no longer exists.
   "inside the noise" into an effect.
 - **Quote the numbers**, with their error bars, not just the direction.
 - **Name the proxy's limits.** `--policy engine-ai` is the shipped AI: it aims at
-  the biggest cluster and never checks whether the line is clear. It cannot
+  the biggest group and never checks whether the line is clear. It cannot
   represent shot selection. If that is the skill in question, say so instead of
   reporting its number.
-- Watch `mean burst size` next to `bursts per minute`. A high rate of 2-ball
-  bursts is not the same game as occasional 9-ball bursts, and the rate alone
+- Watch `mean boom size` next to `booms per minute`. A high rate of 2-ball
+  booms is not the same game as occasional 9-ball booms, and the rate alone
   cannot tell them apart.
 
-Full guide: [`docs/simulation.md`](docs/simulation.md). Historical harnesses and
-the measurement lessons behind the design:
-[`docs/simulation-harnesses.md`](docs/simulation-harnesses.md).
+Full guide: the [Simulation Harness](https://app.notion.com/p/3dfdc052afb1812e8a39e1bbf59cbf71)
+page in Notion.
 
 ## Conventions
 

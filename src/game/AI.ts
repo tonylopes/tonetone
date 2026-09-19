@@ -11,7 +11,7 @@ export function aiAim(p: LauncherPlayer, groups: Group[], balls: Ball[], width: 
   const tempP = { ...p };
 
   if (best && most >= 2) {
-    // NOTE: `rebuildGroups` mints new Group objects on every bond, burst, peel
+    // NOTE: `rebuildGroups` mints new Group objects on every bond, boom, peel
     // and spawn, so this identity check rarely holds and `_targetStrength` is
     // re-rolled far more often than "once per target" suggests. Keying on
     // something stable (the lowest member id) makes it behave as written, but

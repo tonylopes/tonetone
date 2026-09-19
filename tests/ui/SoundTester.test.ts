@@ -41,7 +41,7 @@ describe('SoundTester module', () => {
     AudioStore.volume = 0.9;
     AudioStore.lockVol = 0.5;
     AudioStore.breakVol = 1.7;
-    AudioStore.burstVol = 1.0;
+    AudioStore.boomVol = 1.0;
     AudioStore.clickVol = 0.5;
     AudioStore.drone = 1.0;
   });
@@ -53,11 +53,11 @@ describe('SoundTester module', () => {
     expect(ids).toContain('bond');
     expect(ids).toContain('black_attach');
     expect(ids).toContain('break');
-    expect(ids).toContain('burst_l0');
-    expect(ids).toContain('burst_l1');
-    expect(ids).toContain('burst_l2');
-    expect(ids).toContain('burst_l3');
-    expect(ids).toContain('burst_l4');
+    expect(ids).toContain('boom_l0');
+    expect(ids).toContain('boom_l1');
+    expect(ids).toContain('boom_l2');
+    expect(ids).toContain('boom_l3');
+    expect(ids).toContain('boom_l4');
     expect(ids).toContain('thud_hit');
     expect(ids).toContain('thud_swoosh');
     expect(ids).toContain('white_swoosh');
@@ -117,6 +117,10 @@ describe('SoundTester module', () => {
         frequency: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() },
         connect: vi.fn(),
       })),
+      createDelay: vi.fn(() => ({
+        delayTime: { setValueAtTime: vi.fn() },
+        connect: vi.fn(),
+      })),
       createDynamicsCompressor: vi.fn(() => ({
         threshold: { setValueAtTime: vi.fn() },
         knee: { setValueAtTime: vi.fn() },
@@ -136,7 +140,7 @@ describe('SoundTester module', () => {
     AudioStore.actx = mockCtx as any;
     AudioStore.master = {} as any;
 
-    const btn = document.getElementById('sound-btn-burst_l2') as HTMLButtonElement;
+    const btn = document.getElementById('sound-btn-boom_l2') as HTMLButtonElement;
     expect(() => btn.click()).not.toThrow();
   });
 });

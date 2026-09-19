@@ -1,5 +1,5 @@
 import { AudioStore, applyGain, initAudio as initGameAudio, isOptionsOpen } from '../audio/SynthEngine';
-import { playNote } from '../audio/Voices';
+import { playNote, playRandomGameBoom } from '../audio/Voices';
 import { Flash, Pop } from '../physics/Types';
 import { CURRENTS, FLASH_SPECS, FLASH_LIFE } from '../graphics/VisualFX';
 import { ballSprite, clearSpriteCache, glowSprite } from '../graphics/Sprites';
@@ -221,8 +221,16 @@ function spawnMenuFlash(x: number, y: number, kind?: 'bond' | 'break' | 'spawn' 
     return;
   }
   initMenuAudio();
+  if (k === 'spawn') {
+    // A boom on the menu is a real one, drawn from the spread of chain sizes a
+    // match actually produces, rather than the bare `playNote(..., 'boom')`
+    // this used to make — that passes no chain size, so every menu boom was the
+    // smallest tier and the range never showed.
+    playRandomGameBoom(normX, 'menu');
+    return;
+  }
   playNote(rel !== undefined ? rel : Math.random(), normX,
-    k === 'break' ? 'break' : k === 'bond' ? 'bond' : 'burst');
+    k === 'break' ? 'break' : 'bond');
 }
 
 function updateAndDrawMenuFlashes() {
@@ -291,7 +299,7 @@ const menuPops: MenuPop[] = [];
 let nextPopId = 1;
 let lastAutoPopTime = 0;
 
-const POP_TEXTS = ['BOND!', 'BURST!', 'PEEL!', 'LOCK!', 'COMBO!', '+100', '+500', '+1000', 'SLOT!', 'PERFECT!'];
+const POP_TEXTS = ['BOND!', 'BOOM!', 'PEEL!', 'LOCK!', 'COMBO!', '+100', '+500', '+1000', 'SLOT!', 'PERFECT!'];
 
 function spawnMenuPop(x?: number, y?: number, text?: string, who?: number) {
   if (isOptionsOpen()) return;
@@ -1342,22 +1350,22 @@ function drawBlackBilliardBall(cx: number, cy: number, radius: number) {
   c.restore();
 }
 
-function drawImpactExplosion(cx: number, cy: number, radius: number, t: number) {
+function drawImpactBoom(cx: number, cy: number, radius: number, t: number) {
   const c = ctx;
   if (!c) return;
   c.save();
 
   const energyPulse = 0.85 + Math.sin(t * 0.2) * 0.15;
-  const blastR = radius * 0.70 * energyPulse;
+  const boomR = radius * 0.70 * energyPulse;
 
-  const flashGrad = c.createRadialGradient(cx, cy, 0, cx, cy, blastR);
+  const flashGrad = c.createRadialGradient(cx, cy, 0, cx, cy, boomR);
   flashGrad.addColorStop(0.00, '#ffffff');
   flashGrad.addColorStop(0.30, '#ffff55');
   flashGrad.addColorStop(0.65, '#ff00aa');
   flashGrad.addColorStop(1.00, 'rgba(0, 247, 255, 0)');
 
   c.beginPath();
-  c.arc(cx, cy, blastR, 0, Math.PI * 2);
+  c.arc(cx, cy, boomR, 0, Math.PI * 2);
   c.fillStyle = flashGrad;
   c.shadowColor = '#ff00aa';
   c.shadowBlur = 18 * energyPulse;
@@ -1476,7 +1484,7 @@ function drawLogo(layout: MenuLayout): number {
 
   drawWhiteBilliardBall(whiteBallX, elementY, ballRadius);
   drawBlackBilliardBall(blackBallX, elementY, ballRadius);
-  drawImpactExplosion(impactX, elementY, ballRadius, animFrame);
+  drawImpactBoom(impactX, elementY, ballRadius, animFrame);
 
   const mX = blackBallX + ballRadius + letterSpacing;
   drawPhysicalSplitLettering('M', mX, baselineY, layout.effectiveFontSize);

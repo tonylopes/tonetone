@@ -1,6 +1,6 @@
 # Tone Boom
 
-**Tone Boom** is a physics-based arcade game combining classic billiards mechanics with emergent color-bonding chemistry, rigid-body cluster physics, and procedural Web Audio synthesis. Built with TypeScript and Vite, and packaged for iOS and Android via Capacitor.
+**Tone Boom** is a physics-based arcade game combining classic billiards mechanics with emergent color-bonding chemistry, rigid-body group physics, and procedural Web Audio synthesis. Built with TypeScript and Vite, and packaged for iOS and Android via Capacitor.
 
 ## Getting Started
 
@@ -20,7 +20,7 @@ are exact and reproducible.
 
 ```bash
 npm run sim -- run --mode ai --seconds 120        # play a match and report on it
-npm run sim -- sweep burst=0.2,0.4,0.6 --runs 10 # what does this knob do?
+npm run sim -- sweep boom=0.2,0.4,0.6 --runs 10 # what does this knob do?
 npm run sim -- compare --a kickout=0.5 --b kickout=1.0 --runs 30 --mode duel
 npm run sim:physics                              # textbook collision-solver results
 npm run sim:invariants                           # geometry, checked every frame
@@ -31,8 +31,18 @@ npm run sim -- help
 Add `--json` for machine-readable output (with `npm run --silent`, so npm's banner
 stays off stdout).
 
-See [`docs/simulation.md`](docs/simulation.md) for the guide.
+Full guide: the [Simulation Harness](https://app.notion.com/p/3dfdc052afb1812e8a39e1bbf59cbf71)
+page in Notion.
 
 ## Documentation
 
-See [`docs/design_overview.md`](docs/design_overview.md) for the full architecture overview, with links to detailed docs on the physics engine, audio engine, rendering, UI, and mobile packaging.
+Documentation is maintained in Notion, not in this repository.
+
+Start at **[Design Overview](https://app.notion.com/p/3dfdc052afb1815d89a1c285532baf68)**,
+which carries the executive summary, project layout and architecture diagram, and
+links to the detailed pages on game mechanics, scoring, the physics engine, the
+audio engine, rendering, UI, the simulation harness, the tutorial design and
+mobile packaging. The
+[Documentation](https://app.notion.com/p/3dfdc052afb181d890bbcc0aa14c0ace) home
+page indexes them all, and the project itself lives at
+[Tone Boom](https://app.notion.com/p/3dfdc052afb181719a60ef22a9610f6a).

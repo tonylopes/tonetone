@@ -11,9 +11,9 @@ describe('Physics Config module', () => {
   it('recalculates thresholds accurately based on canvas height', () => {
     recalcThresholds(620);
     expect(PhysicsConfig.SC).toBe(1.0);
-    // SHATTER_SPEED = (THROW_MIN + (THROW_MAX - THROW_MIN) * BURST_AT) * SC
+    // BOOM_SPEED = (THROW_MIN + (THROW_MAX - THROW_MIN) * BOOM_AT) * SC
     // (150 + 1450 * 0.4) * 1.0 = 730
-    expect(PhysicsConfig.SHATTER_SPEED).toBe(730);
+    expect(PhysicsConfig.BOOM_SPEED).toBe(730);
 
     // KICKOUT_MAX = THROW_MAX * KICKOUT_FRAC * SC
     // 1600 * 0.5 * 1 = 800

@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   forEachPair,
   award,
-  explode,
+  popText,
+  boomLabel,
+  boomGroup,
   detach,
   ageGhosts,
   resolveWalls,
@@ -15,7 +17,7 @@ import { PhysicsConfig, recalcThresholds } from '../../src/physics/Config';
 import { Ball } from '../../src/physics/Types';
 import { createGame, resetField, toCollisionState } from '../../src/game/GameState';
 import { makeGroup } from '../../src/physics/RigidBody';
-import { PAY_BLACK, PAY_BLACK_PAIR, PAY_LOCK, SHOT_DECAY, burstPay, lockPay, peelPay, setShotDecay } from '../../src/game/Rules';
+import { PAY_BLACK, PAY_BLACK_PAIR, PAY_LOCK, SHOT_DECAY, boomPay, lockPay, peelPay, setShotDecay } from '../../src/game/Rules';
 
 function createMockBall(id: number, x: number, y: number, kind: number = 0): Ball {
   return {
@@ -58,6 +60,53 @@ describe('CollisionSolver physics module', () => {
     });
   });
 
+  describe('boomLabel', () => {
+    it('steps the word up with the size of the boom', () => {
+      expect(boomLabel(4, false)).toBe('');
+      expect(boomLabel(5, false)).toBe('DOUBLE');
+      expect(boomLabel(9, false)).toBe('DOUBLE');
+      expect(boomLabel(10, false)).toBe('SUPER');
+      expect(boomLabel(14, false)).toBe('SUPER');
+      expect(boomLabel(15, false)).toBe('MEGA');
+      expect(boomLabel(19, false)).toBe('MEGA');
+      expect(boomLabel(20, false)).toBe('GIGA');
+      expect(boomLabel(40, false)).toBe('GIGA');
+    });
+
+    it('uses the same tier boundaries as the boom voice the player hears', () => {
+      // getBoomProps is synthesized in tiers at 0..4, 5..9, 10..14,
+      // 15..19 and 20+. The word and the sound must step together.
+      for (const [count, word] of [[4, ''], [5, 'DOUBLE'], [10, 'SUPER'], [15, 'MEGA'], [20, 'GIGA']] as const) {
+        expect(boomLabel(count, false)).toBe(word);
+      }
+    });
+
+    it('reserves BOOM! for the white-on-black hit', () => {
+      expect(boomLabel(3, true)).toBe('BOOM!');
+      expect(boomLabel(3, false)).toBe('');
+    });
+
+    it('combines the tier with BOOM! when a white-on-black hit is also big', () => {
+      expect(boomLabel(12, true)).toBe('SUPER BOOM!');
+      expect(boomLabel(25, true)).toBe('GIGA BOOM!');
+    });
+  });
+
+  describe('popText', () => {
+    it('puts the boom word beside the points', () => {
+      expect(popText(7, 'boom', { count: 6, whiteBlack: false })).toBe('+7 DOUBLE');
+      expect(popText(13, 'boom', { count: 11, whiteBlack: false })).toBe('+13 SUPER');
+      expect(popText(96, 'boom', { count: 12, whiteBlack: true })).toBe('+96 SUPER BOOM!');
+    });
+
+    it('leaves a small boom, and every lock and peel, as bare points', () => {
+      expect(popText(9, 'boom', { count: 3, whiteBlack: false })).toBe('+9');
+      expect(popText(12, 'lock')).toBe('+12');
+      expect(popText(23, 'peel')).toBe('+23');
+      expect(popText(7)).toBe('+7');
+    });
+  });
+
   describe('award', () => {
     it('increments player score and records category points', () => {
       award(state, 0, 10, 400, 300, 'lock');
@@ -75,8 +124,8 @@ describe('CollisionSolver physics module', () => {
     });
   });
 
-  describe('explode & detach', () => {
-    it('explodes group into ghost balls and awards burst points', () => {
+  describe('boomGroup & detach', () => {
+    it('booms a group into ghost balls and awards boom points', () => {
       const b1 = createMockBall(1, 100, 100, 0);
       const b2 = createMockBall(2, 120, 100, 0);
       b1.bonds.add(2);
@@ -90,19 +139,19 @@ describe('CollisionSolver physics module', () => {
       b2.group = g;
       state.groups = [g];
 
-      explode(state, g, 1000, 0, 1, 800);
+      boomGroup(state, g, 1000, 0, 1, 800);
 
       expect(state.killGroups).toBe(1);
       expect(state.killBalls).toBe(2);
       expect(b1.ghost).toBe(true);
       expect(b2.ghost).toBe(true);
-      expect(state.players[0].bursts).toBe(1);
+      expect(state.players[0].booms).toBe(1);
       expect(state.players[0].score).toBeGreaterThan(0);
     });
 
-    it('handles exploding an empty group safely without TypeError or NaN values', () => {
+    it('handles booming an empty group safely without TypeError or NaN values', () => {
       const emptyGroup = makeGroup([], 0, 0);
-      expect(() => explode(state, emptyGroup, 500, 0, 1, 800)).not.toThrow();
+      expect(() => boomGroup(state, emptyGroup, 500, 0, 1, 800)).not.toThrow();
       expect(state.pops.some(p => Number.isNaN(p.x) || Number.isNaN(p.y))).toBe(false);
     });
 
@@ -127,7 +176,7 @@ describe('CollisionSolver physics module', () => {
       expect(state.players[0].peels).toBe(1);
     });
 
-    it('caps escaping velocity of ghost balls below SHATTER_SPEED majority of the time', () => {
+    it('caps escaping velocity of ghost balls below BOOM_SPEED majority of the time', () => {
       let highSpeedCount = 0;
       const totalRuns = 500;
       for (let i = 0; i < totalRuns; i++) {
@@ -138,10 +187,10 @@ describe('CollisionSolver physics module', () => {
         b.group = g;
         state.groups = [g];
 
-        explode(state, g, 5000, 0, 1, 800);
+        boomGroup(state, g, 5000, 0, 1, 800);
 
         const sp = Math.hypot(b.group.vx, b.group.vy);
-        if (sp >= PhysicsConfig.SHATTER_SPEED) {
+        if (sp >= PhysicsConfig.BOOM_SPEED) {
           highSpeedCount++;
         }
       }
@@ -239,7 +288,7 @@ describe('CollisionSolver physics module', () => {
       expect(bRed.bonds.has(2)).toBe(false);
     });
 
-    it('allows white ball to explode black ball groups', () => {
+    it('allows white ball to boom black ball groups', () => {
       const bBlack = createMockBall(1, 200, 200, -1);
       bBlack.special = 'black';
       const bBlue = createMockBall(2, 215, 200, 1);
@@ -263,7 +312,7 @@ describe('CollisionSolver physics module', () => {
 
       collide(state, 1.0, 800);
 
-      // White ball should explode the black ball group into ghost balls
+      // White ball should boom the black ball group into ghost balls
       expect(bBlack.ghost).toBe(true);
       expect(bBlue.ghost).toBe(true);
     });
@@ -289,7 +338,7 @@ describe('CollisionSolver physics module', () => {
       expect(bBlack.ghost).toBe(true);
     });
 
-    it('preserves black ball when a group bursts from a non-white ball hit', () => {
+    it('preserves black ball when a group booms from a non-white ball hit', () => {
       const bBlue1 = createMockBall(1, 200, 200, 1);
       const bBlue2 = createMockBall(2, 215, 200, 1);
       const bBlack = createMockBall(3, 230, 200, -1);
@@ -317,7 +366,7 @@ describe('CollisionSolver physics module', () => {
 
       collide(state, 1.0, 800);
 
-      // Blue balls burst into ghosts, but black ball remains alive
+      // Blue balls boom into ghosts, but black ball remains alive
       expect(bBlue1.ghost).toBe(true);
       expect(bBlue2.ghost).toBe(true);
       expect(bBlack.ghost).toBeFalsy();
@@ -351,25 +400,25 @@ describe('CollisionSolver physics module', () => {
       }
     });
 
-    it('pays a lock for the balls it adds, growing with the cluster they join', () => {
+    it('pays a lock for the balls it adds, growing with the group they join', () => {
       const c1 = createMockBall(1, 200, 200, 0);
       const c2 = createMockBall(2, 224, 200, 0);
       const c3 = createMockBall(3, 248, 200, 0);
       c1.bonds.add(2); c2.bonds.add(1); c2.bonds.add(3); c3.bonds.add(2);
       for (const b of [c1, c2, c3]) b.credit = -1;
-      const cluster = makeGroup([c1, c2, c3], 0, 0);
-      for (const b of [c1, c2, c3]) b.group = cluster;
+      const group = makeGroup([c1, c2, c3], 0, 0);
+      for (const b of [c1, c2, c3]) b.group = group;
 
       const mover = createMockBall(4, 180, 200, 0);
       mover.shot = { events: 0 };
       const gm = makeGroup([mover], 500, 0);
       mover.group = gm;
-      place([c1, c2, c3, mover], [cluster, gm]);
+      place([c1, c2, c3, mover], [group, gm]);
 
       collide(state, 1.0, 800);
 
       expect(mover.bonds.has(1)).toBe(true);
-      // One ball joined a 3-ball cluster: not the old 3 × merged size of 4.
+      // One ball joined a 3-ball group: not the old 3 × merged size of 4.
       expect(state.players[0].lockPts).toBe(lockPay(1, 0, 3));
       expect(state.players[0].lockPts).toBe(2 * PAY_LOCK);
     });
@@ -398,26 +447,26 @@ describe('CollisionSolver physics module', () => {
       expect(state.players[0].lockPts).toBe(PAY_LOCK * PAY_BLACK_PAIR);
     });
 
-    it('pays a white-ball burst full points', () => {
+    it('pays a white-ball boom full points', () => {
       const c1 = createMockBall(1, 200, 200, 1);
       const c2 = createMockBall(2, 224, 200, 1);
       c1.bonds.add(2); c2.bonds.add(1);
       c1.credit = c2.credit = -1;
-      const cluster = makeGroup([c1, c2], 0, 0);
-      c1.group = c2.group = cluster;
+      const group = makeGroup([c1, c2], 0, 0);
+      c1.group = c2.group = group;
       const white = createMockBall(3, 182, 200, -1);
       white.special = 'white';
       white.shot = { events: 0 };
       const gw = makeGroup([white], 1000, 0); white.group = gw;
-      place([c1, c2, white], [cluster, gw]);
+      place([c1, c2, white], [group, gw]);
 
       collide(state, 1.0, 800);
 
       expect(c1.ghost).toBe(true);
-      expect(state.players[0].burstPts).toBe(burstPay(2));
+      expect(state.players[0].boomPts).toBe(boomPay(2));
     });
 
-    it('pays a peel more the bigger the cluster the ball was knocked off', () => {
+    it('pays a peel more the bigger the group the ball was knocked off', () => {
       const chain = [0, 1, 2, 3, 4].map(i => createMockBall(i + 1, 100 + i * 24, 100, 0));
       for (let i = 0; i < 4; i++) { chain[i].bonds.add(i + 2); chain[i + 1].bonds.add(i + 1); }
       const g = makeGroup(chain, 0, 0);
@@ -444,7 +493,7 @@ describe('CollisionSolver physics module', () => {
       expect(struck.shot).toBe(hitter.shot);
     });
 
-    it('lets burst debris claim a live ball it pushes', () => {
+    it('lets boom debris claim a live ball it pushes', () => {
       const debris = createMockBall(1, 100, 100, 0);
       debris.ghost = true; debris.age = 0; debris.credit = 1; debris.shot = { events: 0 };
       const live = createMockBall(2, 118, 100, 0);

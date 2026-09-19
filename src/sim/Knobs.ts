@@ -97,7 +97,7 @@ export const KNOBS: Record<string, KnobDef> = {
     // 1:00 to 20:00 in half-minute steps. 0 is off the slider but still a legal
     // value: the harness sets `matchLen = 0` for an unwindowed run, so `format`
     // still has to name it.
-    id: 'match', group: 'game', kind: 'range', min: 60, max: 1200, step: 30, default: 180,
+    id: 'match', group: 'game', kind: 'range', min: 60, max: 1200, step: 30, default: 120,
     apply: (v, { game }) => { game.matchLen = v; },
     format: v => (v === 0 ? 'endless' : Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0')),
     read: ({ game }) => game.matchLen,
@@ -134,14 +134,14 @@ export const KNOBS: Record<string, KnobDef> = {
   },
 
   roll: {
-    id: 'roll', group: 'physics', kind: 'range', min: 0.15, max: 1, step: 0.01, default: 0.45,
+    id: 'roll', group: 'physics', kind: 'range', min: 0.15, max: 1, step: 0.01, default: 0.59,
     apply: v => { PhysicsConfig.DRAG = v; },
     format: v => (v >= 0.999 ? 'none' : Math.round(Math.log(500 / PhysicsConfig.STOP) / Math.log(1 / v)) + 's'),
     read: () => PhysicsConfig.DRAG,
   },
 
   bounce: {
-    id: 'bounce', group: 'physics', kind: 'range', min: 0.5, max: 1, step: 0.01, default: 0.94,
+    id: 'bounce', group: 'physics', kind: 'range', min: 0.5, max: 1, step: 0.01, default: 1,
     apply: v => { PhysicsConfig.REST = v; PhysicsConfig.REST_WALL = v * 0.8; },
     format: v => pct(v),
     read: () => PhysicsConfig.REST,
@@ -155,7 +155,7 @@ export const KNOBS: Record<string, KnobDef> = {
   },
 
   kick: {
-    id: 'kick', group: 'physics', kind: 'range', min: 0.2, max: 2.5, step: 0.05, default: 1,
+    id: 'kick', group: 'physics', kind: 'range', min: 0.2, max: 2.5, step: 0.05, default: 1.2,
     apply: v => { PhysicsConfig.KICK = v; },
     format: v => v.toFixed(1) + '×',
     read: () => PhysicsConfig.KICK,
@@ -168,11 +168,11 @@ export const KNOBS: Record<string, KnobDef> = {
     read: ({ game }) => game.reloadTime,
   },
 
-  burst: {
-    id: 'burst', group: 'chain', kind: 'range', min: 0.2, max: 1, step: 0.05, default: 0.4,
-    apply: (v, { height }) => { PhysicsConfig.BURST_AT = v; recalcThresholds(height); },
+  boom: {
+    id: 'boom', group: 'chain', kind: 'range', min: 0.2, max: 1, step: 0.05, default: 0.4,
+    apply: (v, { height }) => { PhysicsConfig.BOOM_AT = v; recalcThresholds(height); },
     format: v => pct(v),
-    read: () => PhysicsConfig.BURST_AT,
+    read: () => PhysicsConfig.BOOM_AT,
   },
 
   maxpower: {
@@ -203,19 +203,21 @@ export const KNOBS: Record<string, KnobDef> = {
     read: () => PhysicsConfig.SPEED_CAP,
   },
 
-  minburst: {
-    id: 'minburst', group: 'chain', kind: 'range', min: 1, max: 6, step: 1, default: 2,
-    apply: v => { PhysicsConfig.MIN_BURST = v; },
+  minboom: {
+    id: 'minboom', group: 'chain', kind: 'range', min: 1, max: 6, step: 1, default: 2,
+    apply: v => { PhysicsConfig.MIN_BOOM = v; },
     format: v => (v <= 1 ? 'any' : v + '+'),
-    read: () => PhysicsConfig.MIN_BURST,
+    read: () => PhysicsConfig.MIN_BOOM,
   },
 
   scale: {
-    id: 'scale', group: 'audio', kind: 'select', default: 'Minor pentatonic', wakesAudio: true, cosmetic: true,
-    options: ['Minor pentatonic', 'Major pentatonic', 'Hirajoshi', 'Kumoi', 'Whole tone'],
-    apply: v => { AudioStore.scale = buildScale(v); },
+    id: 'scale', group: 'audio', kind: 'select', default: 'Hirajoshi', wakesAudio: true, cosmetic: true,
+    // The default is the first option: a <select> with no `selected` attribute
+    // opens on its first entry, so the two cannot be stated separately.
+    options: ['Hirajoshi', 'Minor pentatonic', 'Major pentatonic', 'Kumoi', 'Whole tone'],
+    apply: v => { AudioStore.scaleName = v; AudioStore.scale = buildScale(v); },
     format: () => '',
-    read: () => 'Minor pentatonic',
+    read: () => AudioStore.scaleName,
   },
 
   latency: {
@@ -254,11 +256,11 @@ export const KNOBS: Record<string, KnobDef> = {
     read: () => AudioStore.breakVol,
   },
 
-  burstvol: {
-    id: 'burstvol', group: 'audio', kind: 'range', min: 0, max: 2, step: 0.05, default: 1, wakesAudio: true, cosmetic: true,
-    apply: v => { AudioStore.burstVol = v; },
+  boomvol: {
+    id: 'boomvol', group: 'audio', kind: 'range', min: 0, max: 2, step: 0.05, default: 1, wakesAudio: true, cosmetic: true,
+    apply: v => { AudioStore.boomVol = v; },
     format: v => pct(v),
-    read: () => AudioStore.burstVol,
+    read: () => AudioStore.boomVol,
   },
 
   clicks: {
@@ -275,6 +277,103 @@ export const KNOBS: Record<string, KnobDef> = {
     read: () => AudioStore.drone,
   },
 };
+
+/**
+ * The three presets, declared once for both consumers.
+ *
+ * A preset is a set of *differences* from the registry defaults, not a full
+ * snapshot. `normal` therefore holds nothing at all: it is the shipped default,
+ * and selecting it means "put the knobs I touch back where they started". Every
+ * value here is measured rather than asserted — see the "Screen Shapes and the
+ * Three Presets" study in Notion for the boom rates, group survival and
+ * playability guards each one produces.
+ *
+ * Only gameplay knobs appear. Picking a preset must not move a player's volume
+ * or their colour-blind ball numbers, so the audio and cosmetic knobs are
+ * deliberately outside every preset, and `PRESET_SPAN` below is exactly the set
+ * of knobs a preset is allowed to touch.
+ */
+export interface PresetDef {
+  id: string;
+  /** The name the panel shows, and the `<option>` text in `index.html`. */
+  label: string;
+  /** Knob values that differ from the registry default. */
+  knobs: Record<string, KnobValue>;
+}
+
+export const PRESETS: Record<string, PresetDef> = {
+  normal: { id: 'normal', label: 'Normal', knobs: {} },
+
+  relax: {
+    id: 'relax', label: 'Relax',
+    knobs: {
+      match: 180, reload: 4.5, roll: 0.45, bounce: 0.88, kick: 1, boom: 0.55,
+      minboom: 3, spread: 1.2, kickout: 0.4, maxpower: 1400, speedcap: 2600,
+      size: 14, shotdecay: 0.7,
+    },
+  },
+
+  chaos: {
+    id: 'chaos', label: 'Chaos',
+    knobs: {
+      reload: 1.5, roll: 0.75, boom: 0.3, kickout: 0.8, maxpower: 1500, speedcap: 3600,
+    },
+  },
+};
+
+/** The preset a fresh page load is in: the registry defaults themselves. */
+export const DEFAULT_PRESET = 'normal';
+
+export function presetIds(): string[] {
+  return Object.keys(PRESETS);
+}
+
+/**
+ * Every knob any preset touches.
+ *
+ * Switching presets has to *undo* the previous one, so it is not enough to apply
+ * the incoming preset's own keys: a knob relax moves and chaos does not must go
+ * back to its default when chaos is picked, or the two presets would bleed into
+ * each other in whichever order the player tried them.
+ */
+export const PRESET_SPAN: string[] = Object.keys(KNOBS).filter(id =>
+  Object.values(PRESETS).some(p => id in p.knobs)
+);
+
+/** The value a preset gives a knob: its own override, or the registry default. */
+export function presetValue(presetId: string, knobId: string): KnobValue {
+  const preset = PRESETS[presetId];
+  if (!preset) throw new Error(`Unknown preset "${presetId}". Known presets: ${presetIds().join(', ')}`);
+  const def = KNOBS[knobId];
+  if (!def) throw new Error(`Unknown knob "${knobId}". Known knobs: ${knobIds().join(', ')}`);
+  return knobId in preset.knobs ? preset.knobs[knobId] : def.default;
+}
+
+/** Every knob value a preset implies, across the whole span. */
+export function presetKnobs(presetId: string): Record<string, KnobValue> {
+  const out: Record<string, KnobValue> = {};
+  for (const id of PRESET_SPAN) out[id] = presetValue(presetId, id);
+  return out;
+}
+
+/** Apply a preset to the live config. Knobs outside the span are left alone. */
+export function applyPreset(presetId: string, ctx: KnobContext): void {
+  applyKnobs(presetKnobs(presetId), ctx);
+}
+
+/**
+ * Which preset the live values match, or null if the player has moved something.
+ *
+ * The panel uses this to say "modified" rather than keep claiming a preset the
+ * knobs no longer add up to.
+ */
+export function presetMatching(values: Record<string, KnobValue>): string | null {
+  for (const id of presetIds()) {
+    const wanted = presetKnobs(id);
+    if (PRESET_SPAN.every(k => values[k] === wanted[k])) return id;
+  }
+  return null;
+}
 
 /** Knob ids that can change what a simulation measures. */
 export const SIM_KNOBS = Object.keys(KNOBS).filter(id => !KNOBS[id].cosmetic);
@@ -335,7 +434,7 @@ export interface ConfigSnapshot {
   colors: number;
   specials: boolean;
   shotDecay: number;
-  audio: { volume: number; lockVol: number; breakVol: number; burstVol: number; clickVol: number; drone: number; haptics: number; latency: number };
+  audio: { volume: number; lockVol: number; breakVol: number; boomVol: number; clickVol: number; drone: number; haptics: number; latency: number; scaleName: string; scale: number[] };
 }
 
 export function snapshotConfig(): ConfigSnapshot {
@@ -346,8 +445,9 @@ export function snapshotConfig(): ConfigSnapshot {
     shotDecay: SHOT_DECAY,
     audio: {
       volume: AudioStore.volume, lockVol: AudioStore.lockVol, breakVol: AudioStore.breakVol,
-      burstVol: AudioStore.burstVol, clickVol: AudioStore.clickVol, drone: AudioStore.drone,
+      boomVol: AudioStore.boomVol, clickVol: AudioStore.clickVol, drone: AudioStore.drone,
       haptics: AudioStore.haptics, latency: AudioStore.latency,
+      scaleName: AudioStore.scaleName, scale: AudioStore.scale,
     },
   };
 }

@@ -10,7 +10,7 @@ export const BOND_VOICE = {
   partials: [[1, 1], [2, 0.42]] as [number, number][], open: 3400, close: 1000, dry: 0.62
 };
 
-export const BURST_VOICE = {
+export const BOOM_VOICE = {
   mul: 2, dur: 3.2, jitter: 1.4, peak: 0.17, attack: 0.35, tick: 0,
   partials: [[1, 1], [1.5, 0.25]] as [number, number][], open: 1100, close: 420, dry: 0.3
 };
@@ -93,47 +93,180 @@ function rampFreq(param: any, targetVal: number, targetTime: number) {
   }
 }
 
+/** Which of the five boom-size tiers a boom falls in, 0 (smallest) to 4. */
+export function boomTier(boomSize: number): number {
+  if (boomSize >= 20) return 4;
+  if (boomSize >= 15) return 3;
+  if (boomSize >= 10) return 2;
+  if (boomSize >= 5) return 1;
+  return 0;
+}
+
+export const BOOM_TIER_COUNT = 5;
+
 /**
- * Returns tone (end frequency in Hz), duration (seconds), and volume scaling
- * for burst binaural bass boom based on the burst chain size levels:
- * - Level 0-5 (0..4): tone 80Hz, dur 0.60s, vol 0.33
- * - Level 5-10 (5..9): tone 105Hz, dur 1.00s, vol 0.55
- * - Level 10-15 (10..14): tone 135Hz, dur 1.10s, vol 0.85
- * - Level 15-20 (15..19): tone 170Hz, dur 1.25s, vol 0.90
- * - Level 20+ (>=20): tone 210Hz, dur 1.40s, vol 0.95
+ * Build a five-tier volume ramp that peaks at `peakTier`.
  *
- * At vol 1.5 a 20+ boom alone peaked at -0.2 dBFS, so any voice landing on top
- * of it clipped the output; see the trim in `playBurstBassBoom`.
+ * Every tier up to the peak is a step on one even climb from `floor` to 1.0, so
+ * the peak sits at the top of the usable range and everything below it ramps up
+ * to meet it. Above the peak the ramp steps back down by `falloff` a tier.
+ *
+ * The ramp is generated rather than typed out so that moving a peak is one
+ * number, and so the tiers below it are always redistributed across the whole
+ * span instead of keeping whatever values they happened to have.
  */
-export function getBurstBassBoomProps(chainSize: number) {
-  if (chainSize >= 20) {
-    return { tone: 210, dur: 1.40, vol: 0.95 };
-  } else if (chainSize >= 15) {
-    return { tone: 170, dur: 1.25, vol: 0.90 };
-  } else if (chainSize >= 10) {
-    return { tone: 135, dur: 1.10, vol: 0.85 };
-  } else if (chainSize >= 5) {
-    return { tone: 105, dur: 1.00, vol: 0.55 };
-  } else {
-    return { tone: 80, dur: 0.60, vol: 0.33 };
+export function boomVolumeRamp(peakTier: number, floor: number, falloff: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < BOOM_TIER_COUNT; i++) {
+    const v = i <= peakTier
+      ? (peakTier === 0 ? 1 : floor + (1 - floor) * (i / peakTier))
+      : 1 - falloff * (i - peakTier);
+    out.push(Math.max(0, Math.round(v * 100) / 100));
   }
+  return out;
+}
+
+const BOOM_TONE = [80, 105, 135, 170, 210];
+const BOOM_DUR = [0.60, 1.00, 1.10, 1.25, 1.40];
+
+/**
+ * Level every tier hits the compressor at, before the tier ramp is applied.
+ *
+ * Held constant on purpose: it is what makes the ramp mean anything. See the
+ * note in `playBoom` — a ramp applied upstream of a 4.5:1 compressor
+ * arrives at the output as a fraction of itself.
+ */
+const BOOM_DRIVE = 0.65;
+
+/**
+ * Post-compressor output, multiplied by the tier ramp and the user's boom knob.
+ *
+ * Lower than the 0.63 this used to sit at, because with the ramp now actually
+ * reaching the output every tier is genuinely at its ramp value rather than
+ * compressed up towards the loudest one.
+ */
+const BOOM_OUTPUT = 0.32;
+
+/**
+ * Volume by tier, one ramp per variant. **Neither is monotonic**, and neither
+ * should be "corrected" into a monotonic curve: each peaks at the tier that is
+ * meant to be the loudest and eases off above it.
+ *
+ * - The boom voice peaks at **Level 15-20**: [0.40, 0.60, 0.80, 1.00, 0.85]. The 20+
+ *   tier is still the biggest event in the game — longest duration, lowest tone,
+ *   longest echo tail, and an 808 sub layer the others do not get — so it lands
+ *   on weight rather than on gain. At vol 1.5 a 20+ boom alone measured
+ *   -0.2 dBFS, leaving nothing for any voice on top of it; see the trim in
+ *   `playBoom`.
+ * - White-on-black peaks a tier lower, at **Level 10-15**:
+ *   [0.50, 0.75, 1.00, 0.85, 0.70]. It is lifted `WHITE_BLACK_LIFT` and carries
+ *   a struck-metal ring, so much more of its energy sits where the ear is most
+ *   sensitive; held at the ordinary boom's gain through the top tiers it stops
+ *   reading as bigger and starts reading as harsh.
+ */
+export const BOOM_VOL_RAMP = boomVolumeRamp(3, 0.40, 0.25);
+export const WHITE_BLACK_VOL_RAMP = boomVolumeRamp(2, 0.50, 0.25);
+
+/**
+ * Tone (end frequency in Hz), duration (seconds) and volume for the ordinary
+ * boom voice. Tone and duration rise across every tier; volume follows
+ * `BOOM_VOL_RAMP` and peaks at Level 15-20.
+ */
+export function getBoomProps(boomSize: number) {
+  const i = boomTier(boomSize);
+  return { tone: BOOM_TONE[i], dur: BOOM_DUR[i], vol: BOOM_VOL_RAMP[i] };
 }
 
 /**
- * Synthesizes a clear, punchy binaural bass boom for bursts.
+ * Volume for the white-on-black boom, which has a ramp of its own rather than a
+ * flat multiple of the ordinary one's. Peaks at Level 10-15.
+ */
+export function getWhiteBlackBoomVol(boomSize: number): number {
+  return WHITE_BLACK_VOL_RAMP[boomTier(boomSize)];
+}
+
+/**
+ * Cross-fed echo taps for the boom, scaled by how big the boom was.
+ *
+ * The two delays are deliberately not a simple multiple of each other, so the
+ * repeats interleave into a scatter rather than lining up into one flam, and
+ * each feeds the *other* side — a ping-pong that throws the boom across the
+ * stereo field as it dies away. `feedback` and `tail` both grow with the chain,
+ * so a 2-ball pop still ends promptly while a 20-ball boom rolls out across a
+ * canyon. Feedback is ramped to zero over `tail` rather than left to decay on
+ * its own: it guarantees the loop terminates, and it is what lets the node
+ * cleanup below be scheduled at a known time.
+ */
+export function boomEchoSpec(boomSize: number, whiteBlack: boolean) {
+  const size = Math.max(0, Math.min(1, boomSize / 20));
+  return {
+    left: 0.19 + size * 0.07,
+    // Drifts from ~1.58x the left delay to ~1.65x as the chain grows: near the
+    // golden ratio and, more to the point, never near 3/2 or 2, where every
+    // second right-hand repeat would land on a left one and flam instead of
+    // scatter. `tests/audio/Voices.test.ts` holds it off those multiples.
+    right: 0.30 + size * 0.13,
+    feedback: 0.30 + size * 0.30,
+    // Flat across tiers. The delay times, the feedback and the tail all grow
+    // with the chain — that is the drama — but the send is a *level*, and the
+    // echoes tap off `trim`, downstream of the tier ramp. Growing it with chain
+    // size handed the biggest booms back the loudness the ramp had just taken
+    // off them, which is part of why 20+ read as loudest whatever the ramp said.
+    send: 0.30 * (whiteBlack ? 1.15 : 1),
+    // Metal repeats stay bright longer than a bass boom's do.
+    damp: whiteBlack ? 2600 : 1400,
+    tail: 1.1 + size * 2.4,
+  };
+}
+
+/**
+ * A white ball reaching a black one is the only way a black ever leaves the
+ * table, and it takes the whole group with it. That boom gets its own voice
+ * rather than the ordinary one: the pitch dive is lifted most of an octave, and
+ * a struck-metal ring is layered over it. The ring's partials are deliberately
+ * inharmonic (× 6 and × 9.2 of the tone) so it reads as metal shattering rather
+ * than as another note in the scale, and it is routed past the boom's lowpass —
+ * which sweeps down to a few hundred Hz — or nothing of it would survive.
+ */
+const WHITE_BLACK_LIFT = 1.8;
+const WHITE_BLACK_RING = [
+  { ratio: 6, amp: 0.18, decay: 0.85, pan: -0.45 },
+  { ratio: 9.2, amp: 0.10, decay: 0.55, pan: 0.45 },
+];
+
+/**
+ * Synthesizes a clear, punchy binaural bass boom for booms.
  * Features a rapid pitch-drop dive (startPitch -> endPitch), lowpass filter sweep,
  * soft dynamics compressor to prevent crackle, and scaling by chain size.
+ * `whiteBlack` selects the lifted, ringing variant described above.
  */
-export function playBurstBassBoom(chainSize: number = 3, xNorm: number = 0, ignoreOptionsGuard: boolean = false) {
-  if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.master || AudioStore.burstVol <= 0) return;
+export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsGuard: boolean = false, whiteBlack: boolean = false) {
+  if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.master || AudioStore.boomVol <= 0) return;
   if (!ignoreOptionsGuard && isOptionsOpen()) return;
   const actx = AudioStore.actx;
   const now = actx.currentTime;
   const t = now + 0.015;
   const dest = AudioStore.master;
 
-  const { tone, dur, vol } = getBurstBassBoomProps(chainSize);
-  const peak = vol * AudioStore.burstVol * 0.65;
+  const props = getBoomProps(boomSize);
+  // The lifted boom carries more of its energy where the ear is most sensitive,
+  // so it is shortened, and takes its level from its own ramp rather than a flat
+  // multiple of this one's — the two peak at different tiers on purpose.
+  const tone = props.tone * (whiteBlack ? WHITE_BLACK_LIFT : 1);
+  const dur = props.dur * (whiteBlack ? 0.85 : 1);
+  const vol = whiteBlack ? getWhiteBlackBoomVol(boomSize) : props.vol;
+  // Every tier drives the compressor at the SAME level. The tier ramp and the
+  // user's boom knob are applied downstream of it instead, on `trim`.
+  //
+  // They used to be applied here, and the ramp then did essentially nothing:
+  // with the threshold at -14 dB and a 4.5:1 ratio, every tier sat 10-13 dB into
+  // compression, so the ramp's full 8 dB spread arrived at the output as 1.8 dB
+  // and the step from Level 15-20 to 20+ arrived as 0.31 dB. What was left to
+  // separate the tiers was everything the compressor does not touch — duration,
+  // the 808 sub layer, the echo send — and all of those grow with chain size, so
+  // 20+ came out loudest however the ramp was written. Post-compressor, the ramp
+  // lands 1:1.
+  const peak = BOOM_DRIVE;
   const BEAT_OFFSET = 5; // 5 Hz binaural beat differential
 
   const startPitch = tone * 3.4;
@@ -151,14 +284,107 @@ export function playBurstBassBoom(chainSize: number = 3, xNorm: number = 0, igno
   comp.attack.setValueAtTime(0.005, t);
   comp.release.setValueAtTime(0.15, t);
 
-  // Trim after the compressor. Its automatic makeup gain otherwise hands back
-  // most of any cut made upstream, holding the top tiers within ~2 dB of full
-  // scale — where anything else playing at the same moment clips the output.
+  // Trim after the compressor, and the only place the tier ramp is applied. The
+  // compressor's automatic makeup gain hands back most of any cut made upstream
+  // of it, so a level that must actually be heard has to be set here.
   const trim = actx.createGain();
   parts.push(trim);
-  trim.gain.value = 0.63;
+  trim.gain.value = BOOM_OUTPUT * vol * AudioStore.boomVol;
   comp.connect(trim);
   trim.connect(dest);
+
+  // Echo network. It taps the boom post-trim, so the repeats carry the shape the
+  // listener actually heard, and it returns to `dest` on its own path rather than
+  // back through `comp` — routed through the compressor the repeats would pump
+  // the dry boom down every time one landed.
+  const echo = boomEchoSpec(boomSize, whiteBlack);
+  const echoEnd = t + dur + echo.tail;
+  const delayL = actx.createDelay(1.0);
+  const delayR = actx.createDelay(1.0);
+  const fbL = actx.createGain();
+  const fbR = actx.createGain();
+  const dampL = actx.createBiquadFilter();
+  const dampR = actx.createBiquadFilter();
+  const send = actx.createGain();
+  parts.push(delayL, delayR, fbL, fbR, dampL, dampR, send);
+
+  delayL.delayTime.setValueAtTime(echo.left, t);
+  delayR.delayTime.setValueAtTime(echo.right, t);
+  for (const d of [dampL, dampR]) {
+    d.type = 'lowpass';
+    d.frequency.setValueAtTime(echo.damp, t);
+    d.Q.value = 0.7;
+  }
+  // Each repeat loses its top end, the way a real one loses it to the air.
+  for (const f of [fbL, fbR]) {
+    f.gain.setValueAtTime(echo.feedback, t);
+    f.gain.setValueAtTime(echo.feedback, t + dur);
+    f.gain.linearRampToValueAtTime(0, echoEnd);
+  }
+  send.gain.value = 0.0001;
+  send.gain.setValueAtTime(0.0001, now);
+  send.gain.linearRampToValueAtTime(echo.send, t + 0.02);
+
+  trim.connect(send);
+  send.connect(delayL);
+  send.connect(delayR);
+  // Cross-fed: each side's repeat re-enters on the opposite side.
+  delayL.connect(dampL); dampL.connect(fbL); fbL.connect(delayR);
+  delayR.connect(dampR); dampR.connect(fbR); fbR.connect(delayL);
+
+  if (actx.createStereoPanner) {
+    const panEchoL = actx.createStereoPanner();
+    const panEchoR = actx.createStereoPanner();
+    parts.push(panEchoL, panEchoR);
+    panEchoL.pan.setValueAtTime(-0.75, t);
+    panEchoR.pan.setValueAtTime(0.75, t);
+    dampL.connect(panEchoL); panEchoL.connect(dest);
+    dampR.connect(panEchoR); panEchoR.connect(dest);
+  } else {
+    dampL.connect(dest);
+    dampR.connect(dest);
+  }
+
+  // The boom had no reverb at all before: it was the one voice wired straight
+  // past the wet bus. A send from the echo taps, rather than from the dry boom,
+  // puts the room behind the repeats where it reads as distance.
+  if (AudioStore.wetBus) {
+    dampL.connect(AudioStore.wetBus);
+    dampR.connect(AudioStore.wetBus);
+  }
+
+  // Struck-metal ring for the white-on-black boom. It joins at the compressor
+  // rather than at `lp`, so the boom's downward filter sweep does not swallow it,
+  // while the compressor still holds the pair together on the way out.
+  if (whiteBlack) {
+    for (const mode of WHITE_BLACK_RING) {
+      const osc = actx.createOscillator();
+      const g = actx.createGain();
+      parts.push(osc, g);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(tone * mode.ratio, t);
+      // A slight downward drift over the tail: struck metal sags as it rings out.
+      rampFreq(osc.frequency, tone * mode.ratio * 0.97, t + mode.decay);
+      g.gain.value = 0.0001;
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(Math.max(0.0001, peak * mode.amp), t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + mode.decay);
+      g.gain.linearRampToValueAtTime(0, t + mode.decay + 0.02);
+      osc.connect(g);
+      if (actx.createStereoPanner) {
+        const pan = actx.createStereoPanner();
+        parts.push(pan);
+        pan.pan.setValueAtTime(Math.max(-1, Math.min(1, xNorm * 0.5 + mode.pan)), t);
+        g.connect(pan);
+        pan.connect(comp);
+      } else {
+        g.connect(comp);
+      }
+      osc.start(t);
+      osc.stop(t + mode.decay + 0.05);
+    }
+  }
 
   // Lowpass filter sweep: starts wide for initial boom impact punch, closes into resonant sub tail
   const lp = actx.createBiquadFilter();
@@ -185,7 +411,7 @@ export function playBurstBassBoom(chainSize: number = 3, xNorm: number = 0, igno
   env.connect(lp);
 
   // For higher tiers (>= 15), add deep 808 sub-drop layer for dramatic cinematic weight
-  if (chainSize >= 15) {
+  if (boomSize >= 15) {
     const subOsc = actx.createOscillator();
     const subGain = actx.createGain();
     parts.push(subOsc, subGain);
@@ -248,7 +474,12 @@ export function playBurstBassBoom(chainSize: number = 3, xNorm: number = 0, igno
     rightOsc.connect(env);
   }
   rightOsc.start(t);
-  rightOsc.stop(t + dur + 0.05);
+  // This oscillator drives the cleanup below, so it outlives the boom by the
+  // echo tail. Its envelope reached zero back at `t + dur`, so the extra time is
+  // silent — it costs one idle oscillator to keep the teardown on `onended`
+  // rather than on a timer the audio clock does not govern. Tearing the graph
+  // down at the boom's own end would cut every repeat off with it.
+  rightOsc.stop(echoEnd + 0.1);
 
   rightOsc.onended = () => {
     for (const n of parts) { try { n.disconnect(); } catch (_) {} }
@@ -256,11 +487,104 @@ export function playBurstBassBoom(chainSize: number = 3, xNorm: number = 0, igno
   };
 }
 
-export function playNote(rel: number, xNorm: number, kind: 'bond' | 'break' | 'burst', boost?: number, chainSize?: number, ignoreOptionsGuard: boolean = false) {
+/**
+ * Chain sizes a boom can actually have, one entry per tier of
+ * `getBoomProps`, and how often each is drawn.
+ *
+ * The weights are shaped from what the harness measures the game doing:
+ * `npm run sim -- run --runs 12 --mode solo` gives a mean boom of about 3.8
+ * balls, a biggest-boom-per-minute averaging 10.7, and a largest group ever
+ * built of 19 — so small booms dominate, ten-ball booms are a highlight of a
+ * round, and twenty is the edge of what the shipped AI reaches.
+ *
+ * `menu` keeps that shape but lifts the tail: a true match distribution would
+ * be about 80% smallest-tier, and an attract screen that plays the same small
+ * boom eight times running is not previewing the game's range. `celebration`
+ * leans the other way on purpose — the results screen is a victory lap, so it
+ * should mostly be playing the big ones.
+ *
+ * Measured with `--policy engine-ai`, which aims at the biggest group and
+ * never checks whether the line is clear. It cannot represent shot selection, so
+ * a player who picks shots well may well build past 20 more often than this.
+ */
+const BOOM_TIERS: { lo: number; hi: number }[] = [
+  { lo: 2, hi: 4 },
+  { lo: 5, hi: 9 },
+  { lo: 10, hi: 14 },
+  { lo: 15, hi: 19 },
+  { lo: 20, hi: 26 },
+];
+
+const BOOM_PROFILES = {
+  menu: { weights: [0.50, 0.26, 0.14, 0.07, 0.03], whiteBlack: 0.12 },
+  celebration: { weights: [0.16, 0.24, 0.26, 0.22, 0.12], whiteBlack: 0.28 },
+};
+
+export type BoomProfile = keyof typeof BOOM_PROFILES;
+
+/** Pick a chain size and variant a real match could have produced. */
+export function pickGameBoom(profile: BoomProfile, rand: () => number = Math.random) {
+  const { weights, whiteBlack } = BOOM_PROFILES[profile];
+  let r = rand();
+  let tier = weights.length - 1;
+  for (let i = 0; i < weights.length; i++) {
+    if (r < weights[i]) { tier = i; break; }
+    r -= weights[i];
+  }
+  const { lo, hi } = BOOM_TIERS[tier];
+  return {
+    boomSize: lo + Math.floor(rand() * (hi - lo + 1)),
+    // Only a white ball reaching a black produces this one, so it stays a
+    // garnish rather than the house style, even on the results screen.
+    whiteBlack: rand() < whiteBlack,
+  };
+}
+
+/**
+ * How many attract-screen booms may be ringing at once.
+ *
+ * In a match, booms are limited by how often a group can actually be broken.
+ * The attract screens fire on a timer instead, and `playBoom` has no
+ * voice cap of its own — so at the results screen's cadence, with a top-tier
+ * boom running 1.4s and trailing an echo tail of up to 3.5s behind it, five or
+ * six can overlap. That is both a mud problem and a real CPU cost on a phone,
+ * since every one of them carries its own feedback delay network.
+ */
+const MAX_ATTRACT_BOOMS = 3;
+let attractBoomEnds: number[] = [];
+
+/** Drop the attract-boom bookkeeping. Tests use this between cases. */
+export function resetAttractBooms() {
+  attractBoomEnds = [];
+}
+
+/**
+ * Play one boom the game could really have made, for the attract screens.
+ *
+ * The title and results screens both used to call `playNote(..., 'boom')` with
+ * no chain size, which defaults to 3 — so every boom either screen ever played
+ * was the smallest tier, and the whole upper range of the sound was invisible
+ * outside a match.
+ */
+export function playRandomGameBoom(xNorm: number, profile: BoomProfile, ignoreOptionsGuard: boolean = false) {
+  const boom = pickGameBoom(profile);
+  const actx = AudioStore.actx;
+  if (actx) {
+    const now = actx.currentTime;
+    attractBoomEnds = attractBoomEnds.filter((end) => end > now);
+    if (attractBoomEnds.length >= MAX_ATTRACT_BOOMS) return;
+    const props = getBoomProps(boom.boomSize);
+    const echo = boomEchoSpec(boom.boomSize, boom.whiteBlack);
+    attractBoomEnds.push(now + props.dur + echo.tail);
+  }
+  playBoom(boom.boomSize, xNorm, ignoreOptionsGuard, boom.whiteBlack);
+}
+
+export function playNote(rel: number, xNorm: number, kind: 'bond' | 'break' | 'boom', boost?: number, boomSize?: number, ignoreOptionsGuard: boolean = false, whiteBlack: boolean = false) {
   if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.master) return;
   if (!ignoreOptionsGuard && isOptionsOpen()) return;
-  if (kind === 'burst') {
-    playBurstBassBoom(chainSize ?? 3, xNorm, ignoreOptionsGuard);
+  if (kind === 'boom') {
+    playBoom(boomSize ?? 3, xNorm, ignoreOptionsGuard, whiteBlack);
     return;
   }
 
@@ -380,18 +704,72 @@ export function playNote(rel: number, xNorm: number, kind: 'bond' | 'break' | 'b
   }
 }
 
-export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard: boolean = false) {
+/**
+ * How big the magnet lock sounds, by the size of the group the lock produced.
+ *
+ * The same five tiers the boom voice uses (`getBoomProps`), so a lock
+ * and the boom that later takes the same group apart are heard on one scale:
+ * a ball joining a pair is a tick, a ball closing a twenty-ball group is a
+ * long magnetic groan.
+ *
+ * Duration carries most of that. It spans a factor of five across the tiers,
+ * 0.24s to 1.20s, because length is what makes one of these read as a big event
+ * — an earlier version spread it only 0.18s to 0.38s and was far too timid for
+ * the top tiers. The arc, its filters and the suction sub all sweep across the
+ * whole duration, so a long one is a slow descending groan rather than the same
+ * zap held out.
+ *
+ * Level moves weight and length only. It deliberately does not move pitch,
+ * which is what separates a single black from a pair (`PAIR_LIFT`); if level
+ * moved pitch too, a big single-black lock and a small black-pair lock would
+ * collide.
+ */
+export function getMagnetLockProps(groupSize: number) {
+  if (groupSize >= 20) return { dur: 1.20, vol: 1.95, sub: 2.30, drive: 2.20 };
+  if (groupSize >= 15) return { dur: 0.88, vol: 1.68, sub: 2.00, drive: 1.90 };
+  if (groupSize >= 10) return { dur: 0.62, vol: 1.45, sub: 1.70, drive: 1.60 };
+  if (groupSize >= 5) return { dur: 0.40, vol: 1.18, sub: 1.38, drive: 1.32 };
+  return { dur: 0.24, vol: 0.88, sub: 1.0, drive: 1.0 };
+}
+
+/**
+ * Two blacks locking to each other is the rarest bond on the table and pays
+ * double a single black (`PAY_BLACK_PAIR`), so it reads as *more* than the
+ * ordinary magnet lock in every dimension: a full octave higher, longer, and
+ * louder. `PAIR_LIFT` moves the arc and its filters; the suction sub follows at
+ * `PAIR_SUB_LIFT`, less far, so the lock keeps weight underneath instead of
+ * thinning out into a whistle.
+ *
+ * An earlier version had the pair at 0.8x the duration and 0.8x the level of a
+ * single black, on the reasoning that it was the snappier sound by character and
+ * that its lifted arc sits nearer the ear's most sensitive band, where it would
+ * otherwise read louder than the lock beside it. That is defensible mixing and
+ * was still wrong here: it made the rarest event on the table the meekest one.
+ * The pair now runs longer and louder than a single black at the same tier, and
+ * grows with the chain the same way.
+ */
+export const PAIR_LIFT = 2.0;
+export const PAIR_SUB_LIFT = 1.5;
+export const PAIR_DUR = 1.25;
+export const PAIR_VOL = 1.2;
+
+export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard: boolean = false, isPair: boolean = false, groupSize: number = 2) {
   if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.master) return;
   if (!ignoreOptionsGuard && isOptionsOpen()) return;
   const actx = AudioStore.actx;
   if (AudioStore.activeVoices >= MAX_VOICES) return;
 
+  const lift = isPair ? PAIR_LIFT : 1;
+  const subLift = isPair ? PAIR_SUB_LIFT : 1;
+  const level = getMagnetLockProps(groupSize);
+
   const now = actx.currentTime;
   const t = now + 0.012;
-  const dur = 0.20;
-  // Kept well under the bond lock: the square-wave arc sits at 2-5 kHz, where it
-  // reads far louder than its measured level against the lower game voices.
-  const peak = 0.027 * AudioStore.lockVol;
+  const dur = level.dur * (isPair ? PAIR_DUR : 1);
+  // Kept under the bond lock: the square-wave arc sits at 2-5 kHz, where it
+  // reads louder than its measured level against the lower game voices. The
+  // pair is deliberately not trimmed for that — see `PAIR_LIFT` above.
+  const peak = 0.027 * AudioStore.lockVol * level.vol * (isPair ? PAIR_VOL : 1);
   if (peak <= 0.001) return;
 
   triggerHaptic('light');
@@ -414,19 +792,19 @@ export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard:
   const hp = actx.createBiquadFilter();
   parts.push(hp);
   hp.type = 'highpass';
-  hp.frequency.setValueAtTime(1400, now);
-  hp.frequency.setValueAtTime(1400, t);
-  rampFreq(hp.frequency, 400, t + dur);
+  hp.frequency.setValueAtTime(1400 * lift, now);
+  hp.frequency.setValueAtTime(1400 * lift, t);
+  rampFreq(hp.frequency, 400 * lift, t + dur);
 
   // Resonant lowpass filter sweep: electric brightness (5200Hz) snapping down into magnetic seal (650Hz)
   const lp = actx.createBiquadFilter();
   parts.push(lp);
   lp.type = 'lowpass';
   lp.Q.value = 8.0;
-  lp.frequency.setValueAtTime(5200, now);
-  lp.frequency.setValueAtTime(5200, t);
-  rampFreq(lp.frequency, 1600, t + 0.04);
-  rampFreq(lp.frequency, 650, t + dur);
+  lp.frequency.setValueAtTime(5200 * lift, now);
+  lp.frequency.setValueAtTime(5200 * lift, t);
+  rampFreq(lp.frequency, 1600 * lift, t + 0.04);
+  rampFreq(lp.frequency, 650 * lift, t + dur);
 
   env.connect(hp);
   hp.connect(lp);
@@ -454,15 +832,15 @@ export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard:
   parts.push(carrier, modOsc, modGain);
 
   carrier.type = 'square';
-  carrier.frequency.setValueAtTime(2400, t);
-  rampFreq(carrier.frequency, 450, t + dur);
+  carrier.frequency.setValueAtTime(2400 * lift, t);
+  rampFreq(carrier.frequency, 450 * lift, t + dur);
 
   modOsc.type = 'sawtooth';
-  modOsc.frequency.setValueAtTime(220, t);
-  rampFreq(modOsc.frequency, 85, t + dur);
+  modOsc.frequency.setValueAtTime(220 * lift, t);
+  rampFreq(modOsc.frequency, 85 * lift, t + dur);
 
-  modGain.gain.setValueAtTime(1200, t);
-  rampFreq(modGain.gain, 150, t + dur);
+  modGain.gain.setValueAtTime(1200 * lift * level.drive, t);
+  rampFreq(modGain.gain, 150 * lift * level.drive, t + dur);
 
   modOsc.connect(modGain);
   modGain.connect(carrier.frequency);
@@ -488,8 +866,8 @@ export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard:
     parts.push(src, bp, ng);
 
     bp.type = 'bandpass';
-    bp.frequency.setValueAtTime(4800, t);
-    rampFreq(bp.frequency, 2200, t + 0.07);
+    bp.frequency.setValueAtTime(Math.min(16000, 4800 * lift), t);
+    rampFreq(bp.frequency, Math.min(16000, 2200 * lift), t + 0.07);
     bp.Q.value = 6.0;
 
     ng.gain.value = 0.0001;
@@ -511,14 +889,14 @@ export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard:
   parts.push(subOsc, subGain);
 
   subOsc.type = 'sine';
-  subOsc.frequency.setValueAtTime(130, t);
-  rampFreq(subOsc.frequency, 320, t + 0.03);
-  rampFreq(subOsc.frequency, 90, t + dur);
+  subOsc.frequency.setValueAtTime(130 * subLift, t);
+  rampFreq(subOsc.frequency, 320 * subLift, t + 0.03);
+  rampFreq(subOsc.frequency, 90 * subLift, t + dur);
 
   subGain.gain.value = 0.0001;
   subGain.gain.setValueAtTime(0.0001, now);
   subGain.gain.setValueAtTime(0.0001, t);
-  subGain.gain.linearRampToValueAtTime(peak * 0.35, t + 0.015);
+  subGain.gain.linearRampToValueAtTime(peak * 0.35 * level.sub, t + 0.015);
   subGain.gain.linearRampToValueAtTime(0.0001, t + dur);
   subGain.gain.linearRampToValueAtTime(0, t + dur + 0.03);
 
@@ -540,6 +918,179 @@ function scaleDegree(rel: number): number {
   return Math.max(0, Math.min(9, Math.floor(validRel * 10)));
 }
 
+/**
+ * Mode ratios of a free metal bar — 1 : 2.76 : 5.40 : 8.93.
+ *
+ * These are what make something read as *metal* rather than as a pitch: they
+ * are inharmonic, so the ear hears a struck object instead of a note, and no
+ * amount of filtering a noise sweep reproduces that. Driving a bank of narrow
+ * bandpasses at these ratios with noise excites the same modes a real plate has.
+ * Higher modes get a tighter Q and less level, the way a real bar's do.
+ */
+export const SWOOSH_METAL_MODES = [
+  { ratio: 1, q: 11, amp: 1.0 },
+  { ratio: 2.76, q: 14, amp: 0.62 },
+  { ratio: 5.4, q: 17, amp: 0.34 },
+  { ratio: 8.93, q: 20, amp: 0.16 },
+];
+
+/**
+ * The white cue ball's launch: a metal sheet being swung.
+ *
+ * Built apart from the coloured swoosh because it is a different instrument, not
+ * a brighter setting of the same one. Two independent mode banks are driven from
+ * one noise source and hard-panned, their resonances offset by `BEAT` Hz — the
+ * same binaural construction as the drone and the boom voice. The previous white
+ * swoosh summed to a single mono chain and placed it with one panner, so despite
+ * sitting in a game built on binaural voices it had no width of its own at all.
+ *
+ * `xNorm` still biases the two sides rather than collapsing them, so the launch
+ * keeps its position on the table without giving up the spread.
+ */
+function playWhiteSwoosh(xNorm: number, normForce: number) {
+  const actx = AudioStore.actx!;
+  const now = actx.currentTime;
+  const t = now + 0.010;
+  const dur = 0.34;
+  // Metal does not stop when the swing does. The banks ring on past the sweep
+  // instead of being cut off at `dur`, which is most of what made the first
+  // version of this read as timid: it ended exactly when it stopped moving.
+  const ring = 0.18;
+
+  // Narrow bandpasses pass far less of the noise than a wide lowpass does, so
+  // this runs well above the level the old mono swoosh used for the same swing.
+  const peak = 0.34 * Math.max(0.15, normForce) * AudioStore.clickVol;
+  if (peak < 0.001) return;
+
+  triggerHaptic('heavy');
+
+  // The swing: modes rise as the ball is thrown, then fall away behind it. A
+  // wider arc travelled faster is the difference between a swing and a wave.
+  const baseStart = 460, baseMid = 1700, baseEnd = 560;
+  const bias = Math.max(-1, Math.min(1, xNorm || 0));
+
+  const parts: any[] = [];
+
+  const src = actx.createBufferSource();
+  parts.push(src);
+  src.buffer = AudioStore.noiseBuf;
+  src.loop = true;
+  src.playbackRate.value = 1.9;
+
+  const g = actx.createGain();
+  parts.push(g);
+  g.gain.value = 0.0001;
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(Math.max(0.0001, peak), t + 0.018);
+  g.gain.linearRampToValueAtTime(Math.max(0.0001, peak * 0.80), t + dur * 0.55);
+  g.gain.linearRampToValueAtTime(Math.max(0.0001, peak * 0.30), t + dur);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur + ring);
+  g.gain.linearRampToValueAtTime(0, t + dur + ring + 0.03);
+  src.connect(g);
+
+  // Onset scrape: a few milliseconds of very bright noise, above every mode, for
+  // the initial bite of metal being struck. Without it the banks fade up into
+  // the swing rather than being hit into it.
+  const scrapeSrc = actx.createBufferSource();
+  const scrapeBp = actx.createBiquadFilter();
+  const scrapeG = actx.createGain();
+  parts.push(scrapeSrc, scrapeBp, scrapeG);
+  scrapeSrc.buffer = AudioStore.noiseBuf;
+  scrapeSrc.loop = true;
+  scrapeSrc.playbackRate.value = 2.6;
+  scrapeBp.type = 'bandpass';
+  scrapeBp.Q.value = 1.1;
+  scrapeBp.frequency.setValueAtTime(6200, t);
+  rampFreq(scrapeBp.frequency, 3100, t + 0.09);
+  scrapeG.gain.value = 0.0001;
+  scrapeG.gain.setValueAtTime(0.0001, now);
+  scrapeG.gain.setValueAtTime(Math.max(0.0001, peak * 0.5), t);
+  scrapeG.gain.exponentialRampToValueAtTime(0.0001, t + 0.075);
+  scrapeG.gain.linearRampToValueAtTime(0, t + 0.1);
+  scrapeSrc.connect(scrapeBp);
+  scrapeBp.connect(scrapeG);
+  scrapeSrc.start(t, Math.random() * 0.1);
+  scrapeSrc.stop(t + 0.12);
+
+  // One bank per ear. Detuning them by BEAT Hz at every mode is what produces
+  // the beating; panning alone would only place a mono sound.
+  for (const side of [-1, 1]) {
+    let dest: AudioNode = AudioStore.master!;
+    if (actx.createStereoPanner) {
+      const pan = actx.createStereoPanner();
+      parts.push(pan);
+      // Hard-ish sides, nudged by where on the table the throw happened.
+      pan.pan.value = Math.max(-1, Math.min(1, side * 0.85 + bias * 0.15));
+      pan.connect(dest);
+      dest = pan;
+    }
+    // A side kept slightly quieter reads as further away, which is the pan.
+    const sideGain = actx.createGain();
+    parts.push(sideGain);
+    sideGain.gain.value = Math.max(0.35, 1 - 0.3 * side * bias) * 0.72;
+    sideGain.connect(dest);
+    scrapeG.connect(sideGain);
+
+    const offset = (side * BEAT) / 2;
+    for (const mode of SWOOSH_METAL_MODES) {
+      const bp = actx.createBiquadFilter();
+      const mg = actx.createGain();
+      parts.push(bp, mg);
+      bp.type = 'bandpass';
+      bp.Q.value = mode.q;
+      const f0 = baseStart * mode.ratio + offset;
+      const f1 = baseMid * mode.ratio + offset;
+      const f2 = baseEnd * mode.ratio + offset;
+      bp.frequency.value = f0;
+      bp.frequency.setValueAtTime(f0, now);
+      bp.frequency.setValueAtTime(f0, t);
+      rampFreq(bp.frequency, f1, t + dur * 0.4);
+      rampFreq(bp.frequency, f2, t + dur);
+      mg.gain.value = mode.amp;
+      g.connect(bp);
+      bp.connect(mg);
+      mg.connect(sideGain);
+    }
+
+    // Binaural sub under the metal, so the throw still has weight.
+    const sub = actx.createOscillator();
+    const subGain = actx.createGain();
+    parts.push(sub, subGain);
+    sub.type = 'sine';
+    const s0 = 190 + offset, s1 = 430 + offset, s2 = 150 + offset;
+    sub.frequency.value = s0;
+    sub.frequency.setValueAtTime(s0, now);
+    sub.frequency.setValueAtTime(s0, t);
+    rampFreq(sub.frequency, s1, t + dur * 0.4);
+    rampFreq(sub.frequency, s2, t + dur);
+    subGain.gain.value = 0.0001;
+    subGain.gain.setValueAtTime(0.0001, now);
+    subGain.gain.setValueAtTime(0.0001, t);
+    subGain.gain.linearRampToValueAtTime(peak * 0.42, t + 0.03);
+    subGain.gain.linearRampToValueAtTime(0.0001, t + dur);
+    subGain.gain.linearRampToValueAtTime(0, t + dur + 0.04);
+    sub.connect(subGain);
+    subGain.connect(dest);
+    sub.start(t);
+    sub.stop(t + dur + 0.06);
+  }
+
+  // Metal rings into the room; the dry-only mono version never did.
+  if (AudioStore.wetBus) g.connect(AudioStore.wetBus);
+
+  const bufDur = AudioStore.noiseBuf!.duration || 2.0;
+  src.start(t, Math.random() * Math.max(0, bufDur - 0.5));
+  src.stop(t + dur + ring + 0.06);
+
+  AudioStore.thuds++;
+  src.onended = () => {
+    AudioStore.thuds = Math.max(0, AudioStore.thuds - 1);
+    for (const n of parts) { try { n.disconnect(); } catch (e) {} }
+    parts.length = 0;
+  };
+}
+
 // Launch swoosh. Ball-on-ball collisions are `playKnock`.
 export function playThud(kind: 'swoosh', xNorm: number, force: number, ignoreOptionsGuard: boolean = false, isWhite: boolean = false) {
   if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.noiseBuf || !AudioStore.master || AudioStore.clickVol <= 0) return;
@@ -552,41 +1103,39 @@ export function playThud(kind: 'swoosh', xNorm: number, force: number, ignoreOpt
   if (now - AudioStore.swooshAt < 0.08) return;
   AudioStore.swooshAt = now;
 
+  // The white ball is a different instrument, not a brighter setting of this one.
+  if (isWhite) { playWhiteSwoosh(xNorm, normForce); return; }
+
   // Tight 10ms lookahead for immediate audio response without JS frame-lag crackle
   const t = now + 0.010;
-  const dur = isWhite ? 0.28 : 0.22;
-  const peakMult = isWhite ? 0.072 : 0.22;
-  const peak = peakMult * Math.max(0.15, normForce) * AudioStore.clickVol;
+  const dur = 0.22;
+  const peak = 0.22 * Math.max(0.15, normForce) * AudioStore.clickVol;
   if (peak < 0.001) return;
-
-  if (isWhite) {
-    triggerHaptic('medium');
-  }
 
   const src = actx.createBufferSource();
   src.buffer = AudioStore.noiseBuf;
   src.loop = true;
-  src.playbackRate.value = isWhite ? 1.75 : 0.85;
+  src.playbackRate.value = 0.85;
 
   // 1. Envelope Gain Node FIRST (initialized to 0.0001 to prevent step discontinuities into filter)
   const g = actx.createGain();
   g.gain.value = 0.0001;
   g.gain.setValueAtTime(0.0001, now);
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(Math.max(0.0001, peak), t + (isWhite ? 0.05 : 0.04));
+  g.gain.linearRampToValueAtTime(Math.max(0.0001, peak), t + 0.04);
   g.gain.linearRampToValueAtTime(0.0001, t + dur);
   g.gain.linearRampToValueAtTime(0, t + dur + 0.03);
 
   // 2. Lowpass Filter SECOND (receives zero-initialized gain output)
   const bp = actx.createBiquadFilter();
   bp.type = 'lowpass';
-  bp.Q.value = isWhite ? 1.4 : 0.7;
-  const startFreq = isWhite ? 1100 : 350;
+  bp.Q.value = 0.7;
+  const startFreq = 350;
   bp.frequency.value = startFreq;
   bp.frequency.setValueAtTime(startFreq, now);
   bp.frequency.setValueAtTime(startFreq, t);
-  rampFreq(bp.frequency, isWhite ? 3200 : 1000, t + dur * 0.4);
-  rampFreq(bp.frequency, isWhite ? 800 : 250, t + dur);
+  rampFreq(bp.frequency, 1000, t + dur * 0.4);
+  rampFreq(bp.frequency, 250, t + dur);
 
   // Connect: src -> g -> bp
   const parts: any[] = [src, g, bp];
@@ -599,9 +1148,9 @@ export function playThud(kind: 'swoosh', xNorm: number, force: number, ignoreOpt
   parts.push(osc, oscGain);
   osc.type = 'sine';
 
-  const startP = isWhite ? 480 : 130;
-  const midP = isWhite ? 1150 : 260;
-  const endP = isWhite ? 550 : 100;
+  const startP = 130;
+  const midP = 260;
+  const endP = 100;
 
   osc.frequency.value = startP;
   osc.frequency.setValueAtTime(startP, now);
@@ -620,31 +1169,6 @@ export function playThud(kind: 'swoosh', xNorm: number, force: number, ignoreOpt
   oscGain.connect(bp);
   osc.start(t);
   osc.stop(t + dur + 0.05);
-
-  // If white ball, add high shimmer overtone for sparkle launch presence
-  if (isWhite) {
-    const hOsc = actx.createOscillator();
-    const hGain = actx.createGain();
-    parts.push(hOsc, hGain);
-    hOsc.type = 'sine';
-    hOsc.frequency.value = startP * 2;
-    hOsc.frequency.setValueAtTime(startP * 2, now);
-    hOsc.frequency.setValueAtTime(startP * 2, t);
-    rampFreq(hOsc.frequency, midP * 2, t + dur * 0.4);
-    rampFreq(hOsc.frequency, endP * 2, t + dur);
-
-    hGain.gain.value = 0.0001;
-    hGain.gain.setValueAtTime(0.0001, now);
-    hGain.gain.setValueAtTime(0.0001, t);
-    hGain.gain.linearRampToValueAtTime(peak * 0.35, t + 0.03);
-    hGain.gain.linearRampToValueAtTime(0.0001, t + dur * 0.7);
-    hGain.gain.linearRampToValueAtTime(0, t + dur + 0.03);
-
-    hOsc.connect(hGain);
-    hGain.connect(bp);
-    hOsc.start(t);
-    hOsc.stop(t + dur + 0.05);
-  }
 
   if (actx.createStereoPanner) {
     const pan = actx.createStereoPanner();

@@ -34,11 +34,13 @@ export interface AudioState {
   thudAt: number;
   swooshAt: number;
   thuds: number;
+  /** Name of the scale in `scale`, so the tuning panel can read its own value back. */
+  scaleName: string;
   scale: number[];
   volume: number;
   lockVol: number;
   breakVol: number;
-  burstVol: number;
+  boomVol: number;
   clickVol: number;
   drone: number;
   /** 1 = fire native haptics on sound events, 0 = silent. */
@@ -71,11 +73,12 @@ export const AudioStore: AudioState = {
   thudAt: -9,
   swooshAt: -9,
   thuds: 0,
-  scale: buildScale('Minor pentatonic'),
+  scaleName: 'Hirajoshi',
+  scale: buildScale('Hirajoshi'),
   volume: 0.9,
   lockVol: 1.2,
   breakVol: 1.0,
-  burstVol: 1.3,
+  boomVol: 1.3,
   clickVol: 1.1,
   drone: 1.0,
   haptics: 1,
