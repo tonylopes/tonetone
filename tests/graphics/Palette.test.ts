@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  BALL_COLORS, BALL_RGB, BLACK, BLACK_HEX, CYAN, INK, MENU_CYAN, MENU_PINK,
+  BALL_COLORS, BALL_RGB, BLACK, BLACK_HEX, CYAN, INK, MENU_CYAN,
   MENU_PINK_DEEP, PINK, Rgb, VOID, WHITE, WHITE_HEX, hex, rgb, rgba,
 } from '../../src/graphics/Palette';
 import { P_COLOR, P_RGB } from '../../src/graphics/Renderer';
@@ -32,7 +32,6 @@ describe('Palette', () => {
       ['--void', VOID],
       ['--ink', INK],
       ['--menu-cyan', MENU_CYAN],
-      ['--menu-pink', MENU_PINK],
       ['--menu-pink-deep', MENU_PINK_DEEP],
     ];
 
@@ -47,7 +46,7 @@ describe('Palette', () => {
     it('leaves no brand colour spelled out as a literal outside :root', () => {
       const src = readFileSync(resolve(__dirname, '../../index.css'), 'utf8');
       const body = src.slice(src.indexOf('}'));
-      const named = [CYAN, PINK, VOID, INK, MENU_CYAN, MENU_PINK, MENU_PINK_DEEP].map(hex);
+      const named = [CYAN, PINK, VOID, INK, MENU_CYAN, MENU_PINK_DEEP].map(hex);
       const found = named.filter(h => body.toLowerCase().includes(h));
       expect(found, 'use var(--…) rather than repeating a named colour').toEqual([]);
     });
@@ -55,7 +54,7 @@ describe('Palette', () => {
 
   describe('string forms', () => {
     it('writes hex in lower case, six digits', () => {
-      expect(hex(CYAN)).toBe('#4ff0ff');
+      expect(hex(CYAN)).toBe('#00e5ff');
       expect(hex([0, 0, 0])).toBe('#000000');
       expect(BLACK_HEX).toBe(hex(BLACK));
       expect(WHITE_HEX).toBe(hex(WHITE));

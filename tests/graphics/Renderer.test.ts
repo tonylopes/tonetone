@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { drawPops, drawOneLauncher, popCenterX, POP_EDGE_PAD, RenderContext, P_COLOR } from '../../src/graphics/Renderer';
+import { CYAN, PINK, rgba } from '../../src/graphics/Palette';
 import { createGame } from '../../src/game/GameState';
 
 function createMockContext() {
@@ -107,6 +108,10 @@ describe('Renderer module - popCenterX', () => {
 
 describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
   it('renders arrow head with the exact same strokeStyle as the dotted line and scales width and length with strength', () => {
+    // Taken from the palette rather than spelled out, so a colour decision moves
+    // this test with it instead of breaking it.
+    const cyanPrefix = rgba(CYAN, 0).slice(0, -2);
+    const pinkPrefix = rgba(PINK, 0).slice(0, -2);
     const strokeStyles: string[] = [];
     const lineWidths: number[] = [];
     const ctx = {
@@ -167,7 +172,7 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
 
     const lowStrokes = strokeStyles.slice(-2);
     expect(lowStrokes[0]).toBe(lowStrokes[1]); // Dotted line & arrow share identical color
-    expect(lowStrokes[0]).toContain('rgba(79,240,255,'); // P1 cyan color
+    expect(lowStrokes[0]).toContain(cyanPrefix); // P1's colour
     const lowWidth = lineWidths[lineWidths.length - 1];
     expect(lowWidth).toBeCloseTo(3.1); // 2.5 + 0.2 * 3 = 3.1
 
@@ -177,7 +182,7 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
 
     const highStrokes = strokeStyles.slice(-2);
     expect(highStrokes[0]).toBe(highStrokes[1]); // Dotted line & arrow share identical color
-    expect(highStrokes[0]).toContain('rgba(255,26,217,'); // Boom magenta color
+    expect(highStrokes[0]).toContain(pinkPrefix); // the boom magenta
     const highWidth = lineWidths[lineWidths.length - 1];
     expect(highWidth).toBeCloseTo(5.2); // 2.5 + 0.9 * 3 = 5.2
 

@@ -9,7 +9,7 @@ import { TAU } from '../math';
 import { ballSprite, clearSpriteCache, glowSprite } from '../graphics/Sprites';
 import { uiFont, logoFont } from '../graphics/Fonts';
 import { colorOfKind, randomKind } from '../game/Rules';
-import { BLACK_HEX, MENU_CYAN, MENU_PINK, MENU_PINK_DEEP, WHITE_HEX, hex, rgb, rgba } from '../graphics/Palette';
+import { BLACK_HEX, MENU_CYAN, MENU_PINK_DEEP, PINK, WHITE_HEX, hex, rgb, rgba } from '../graphics/Palette';
 import { P_COLOR } from '../graphics/Renderer';
 
 export interface MenuItem {
@@ -368,7 +368,7 @@ function updateAndDrawMenuPops() {
 const noteSymbols = ['♪', '♫', '♬', '♩', '𝄢'];
 const noteColors = [
   { main: hex(MENU_CYAN), glow: rgba(MENU_CYAN, 0.95) },
-  { main: hex(MENU_PINK), glow: rgba(MENU_PINK, 0.95) },
+  { main: hex(PINK), glow: rgba(PINK, 0.95) },
   { main: '#00e5ff', glow: 'rgba(0, 229, 255, 0.90)' },
   { main: '#e879f9', glow: 'rgba(232, 121, 249, 0.90)' },
   { main: '#c084fc', glow: 'rgba(192, 132, 252, 0.90)' }
@@ -1347,13 +1347,13 @@ function drawImpactBoom(cx: number, cy: number, radius: number, t: number) {
   const flashGrad = c.createRadialGradient(cx, cy, 0, cx, cy, boomR);
   flashGrad.addColorStop(0.00, WHITE_HEX);
   flashGrad.addColorStop(0.30, '#ffff55');
-  flashGrad.addColorStop(0.65, hex(MENU_PINK));
+  flashGrad.addColorStop(0.65, hex(PINK));
   flashGrad.addColorStop(1.00, 'rgba(0, 247, 255, 0)');
 
   c.beginPath();
   c.arc(cx, cy, boomR, 0, TAU);
   c.fillStyle = flashGrad;
-  c.shadowColor = hex(MENU_PINK);
+  c.shadowColor = hex(PINK);
   c.shadowBlur = 18 * energyPulse;
   c.fill();
 
@@ -1372,7 +1372,7 @@ function drawImpactBoom(cx: number, cy: number, radius: number, t: number) {
 
     const rayGrad = c.createLinearGradient(x1, y1, x2, y2);
     rayGrad.addColorStop(0.0, WHITE_HEX);
-    rayGrad.addColorStop(0.4, (i % 2 === 0 ? hex(MENU_CYAN) : hex(MENU_PINK)));
+    rayGrad.addColorStop(0.4, (i % 2 === 0 ? hex(MENU_CYAN) : hex(PINK)));
     rayGrad.addColorStop(1.0, 'rgba(255, 255, 255, 0)');
 
     c.strokeStyle = rayGrad;
@@ -1413,7 +1413,7 @@ function drawPhysicalSplitLettering(text: string, x: number, y: number, fontSize
   splitGrad.addColorStop(0.48, '#00b8e6');
   splitGrad.addColorStop(0.50, WHITE_HEX);
   splitGrad.addColorStop(0.52, WHITE_HEX);
-  splitGrad.addColorStop(0.55, hex(MENU_PINK));
+  splitGrad.addColorStop(0.55, hex(PINK));
   splitGrad.addColorStop(0.75, hex(MENU_PINK_DEEP));
   splitGrad.addColorStop(0.92, '#b30059');
   splitGrad.addColorStop(1.00, '#420021');
@@ -1521,7 +1521,7 @@ function drawMenu(layout: MenuLayout) {
       const borderGrad = c.createLinearGradient(btn.x, btn.y, btn.x + btn.width, btn.y);
       borderGrad.addColorStop(0.00, hex(MENU_CYAN));
       borderGrad.addColorStop(0.45, '#00e1ff');
-      borderGrad.addColorStop(0.55, hex(MENU_PINK));
+      borderGrad.addColorStop(0.55, hex(PINK));
       borderGrad.addColorStop(1.00, hex(MENU_PINK_DEEP));
       c.strokeStyle = borderGrad;
       c.lineWidth = 2.4;

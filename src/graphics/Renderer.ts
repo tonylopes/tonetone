@@ -3,7 +3,7 @@ import { PhysicsConfig, recalcThresholds } from '../physics/Config';
 import { uiFont } from './Fonts';
 import { ballSprite, inkOn, SP_R, SPRITE } from './Sprites';
 import { BG_SCALE, FIELD_RING, FLASH_SPECS, RESULTS_RING, drawLiquid, drawRippleRing } from './VisualFX';
-import { BLACK_HEX, CYAN, FIELD_BG, LAUNCHER_CYAN, MENU_CYAN, PINK, Rgb, WHITE, WHITE_HEX, hex, rgba } from './Palette';
+import { BLACK_HEX, CYAN, FIELD_BG, MENU_CYAN, PINK, Rgb, WHITE, WHITE_HEX, hex, rgba } from './Palette';
 import { FLASH_LIFE, POP_LIFE } from '../physics/Types';
 import { setHidden } from '../ui/Dom';
 import { aimDirOf, aimReachOf, launchPointOf, mouthRadius, throwSpeedOf } from '../physics/LauncherBays';
@@ -231,10 +231,11 @@ export function drawLaunchers(rc: RenderContext, game: Game, time: number) {
 /**
  * Everything one launcher is painted with.
  *
- * Player 1's mouth ring, reload arc, ready pulse and bead are `LAUNCHER_CYAN`
- * while the same player's inner ring and aim arrow are `CYAN` — two cyans for
- * one player. The table is where that now shows, rather than being spread over
- * six ternaries; player 2 uses `PINK` for all of it.
+ * `ring` and `body` are the same colour for both players now. They are kept
+ * apart because they were not always: player 1's mouth, reload arc, ready pulse
+ * and bead used to be a second cyan `#00e5ff`, ΔE 4.1 from the cyan the rest of
+ * that player wore. The two were merged onto `#00e5ff` on 2026-09-19, so a
+ * launcher no longer disagrees with the player it belongs to.
  */
 interface LauncherPaint {
   /** Mouth ring, reload arc, ready pulse, bead. */
@@ -248,7 +249,7 @@ interface LauncherPaint {
 }
 
 const LAUNCHER_PAINT: LauncherPaint[] = [
-  { ring: LAUNCHER_CYAN, body: CYAN, glow: [0, 200, 255], bead: [0xb3, 0xf7, 0xff] },
+  { ring: CYAN, body: CYAN, glow: [0, 200, 255], bead: [0xb3, 0xf7, 0xff] },
   { ring: PINK, body: PINK, glow: PINK, bead: [0xff, 0xd9, 0xf7] },
 ];
 

@@ -4,12 +4,11 @@
   --ink: #f3e7ff;
   --ink-soft: #ac91d0;
   --pink: #ff1ad9;
-  --cyan: #4ff0ff;
+  --cyan: #00e5ff;
   /* The menu screen's own three brand shades, close to but not equal to
      --cyan and --pink. src/graphics/Palette.ts holds the same values, and
      tests/graphics/Palette.test.ts fails if the two copies disagree. */
   --menu-cyan: #00f7ff;
-  --menu-pink: #ff00aa;
   --menu-pink-deep: #ff007f;
   --rail: rgba(255, 255, 255, 0.18);
 

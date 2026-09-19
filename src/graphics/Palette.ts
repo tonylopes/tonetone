@@ -42,8 +42,18 @@ export function rgba(c: Rgb, alpha: number): string {
 // These four are mirrored by custom properties in `index.css`, and
 // `tests/graphics/Palette.test.ts` fails if the two copies disagree.
 
-/** `--cyan`. Player 1. */
-export const CYAN: Rgb = [0x4f, 0xf0, 0xff];
+/**
+ * `--cyan`. Player 1, everywhere: launcher, aim arrow, score pops, HUD titles.
+ *
+ * This was `#4ff0ff` until 2026-09-19, with the launcher wearing a second cyan
+ * `#00e5ff` of its own. The two were merged onto the launcher's deeper shade.
+ * One thing that moved with it: the player's cyan is now CIEDE2000 5.1 from the
+ * cyan **ball** `#42D4F4`, where it was 8.5 — and the cyan ball is on the table
+ * whenever `colours` is 6, which all three of Cascade, Drift and Rally set.
+ * That distance belongs to the ball-colour task; it is recorded here because
+ * this is the colour that moved.
+ */
+export const CYAN: Rgb = [0x00, 0xe5, 0xff];
 /** `--pink`. Player 2. */
 export const PINK: Rgb = [0xff, 0x1a, 0xd9];
 /** `--void`. The page behind everything. */
@@ -56,26 +66,15 @@ export const INK: Rgb = [0xf3, 0xe7, 0xff];
 /** The field's backdrop, painted flat once the match is over. */
 export const FIELD_BG: Rgb = [0x14, 0x0a, 0x2b];
 
-/**
- * Player 1's launcher cyan, which is **not** `CYAN`.
- *
- * Two cyans for one player: the launcher mouth, its reload arc and its ready
- * pulse use this one, while the same player's score pops, HUD titles and aim
- * arrow use `CYAN`. They are ΔE 4.1 apart — barely visible, but it is one
- * player. Merging them is a player-visible change and is not made here.
- */
-export const LAUNCHER_CYAN: Rgb = [0x00, 0xe5, 0xff];
-
 // ── Menu ───────────────────────────────────────────────────────────────────
-// The menu screen has its own three brand colours, all close to but not equal
-// to `CYAN` and `PINK`. They are named rather than merged, so that whether the
-// menu keeps its own shades stays a decision somebody makes on purpose.
+// The menu screen keeps two brand colours of its own. A third, `#ff00aa`, was
+// ΔE 7.5 from `PINK` and close enough to be the same intent; it was merged into
+// `PINK` on 2026-09-19. These two are far enough from the brand pair to be
+// deliberate, and the logo's split gradient needs the range.
 
-/** The menu's cyan, ΔE 3.7 from `CYAN`. */
+/** The menu's cyan, ΔE 7.0 from `CYAN`. */
 export const MENU_CYAN: Rgb = [0x00, 0xf7, 0xff];
-/** The menu's pink, ΔE 7.5 from `PINK`. */
-export const MENU_PINK: Rgb = [0xff, 0x00, 0xaa];
-/** The menu's deeper pink, ΔE 15.5 from `PINK` — clearly a different colour. */
+/** The menu's deep pink, ΔE 15.5 from `PINK` — clearly a different colour. */
 export const MENU_PINK_DEEP: Rgb = [0xff, 0x00, 0x7f];
 
 // ── Neutrals ───────────────────────────────────────────────────────────────
