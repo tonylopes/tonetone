@@ -3,11 +3,11 @@ import { PhysicsConfig, recalcThresholds } from '../physics/Config';
 import { uiFont } from './Fonts';
 import { ballSprite, inkOn, SP_R, SPRITE } from './Sprites';
 import { BG_SCALE, FIELD_RING, FLASH_SPECS, RESULTS_RING, drawLiquid, drawRippleRing } from './VisualFX';
-import { BLACK_HEX, CYAN, FIELD_BG, MENU_CYAN, PINK, Rgb, WHITE, WHITE_HEX, hex, rgba } from './Palette';
+import { AIM_HOT, BLACK_HEX, CYAN, FIELD_BG, MENU_CYAN, PINK, Rgb, VOID, WHITE, WHITE_HEX, hex, mix, rgba } from './Palette';
 import { FLASH_LIFE, POP_LIFE } from '../physics/Types';
 import { setHidden } from '../ui/Dom';
 import { popText } from './PopText';
-import { aimDirOf, aimReachOf, launchPointOf, mouthRadius, throwSpeedOf } from '../physics/LauncherBays';
+import { aimDirOf, aimReachOf, boomHeatOf, launchPointOf, mouthRadius } from '../physics/LauncherBays';
 import { LauncherPlayer } from '../physics/Types';
 import { kindLabel } from '../game/Rules';
 import { TAU } from '../math';
@@ -242,7 +242,9 @@ export function drawLaunchers(rc: RenderContext, game: Game, time: number) {
 interface LauncherPaint {
   /** Mouth ring, reload arc, ready pulse, bead. */
   ring: Rgb;
-  /** Inner ring and aim arrow — the player's colour everywhere else. */
+  /** Inner ring — the player's colour everywhere else. The aim arrow left this
+   *  in 2026-09-19 for the `WHITE`-to-`AIM_HOT` power ramp, so the arrow is no
+   *  longer one of the things a player's colour says. */
   body: Rgb;
   /** The soft wash under the reload arc. */
   glow: Rgb;
@@ -284,7 +286,7 @@ export function drawOneLauncher(rc: RenderContext, game: Game, p: LauncherPlayer
   ctx.globalCompositeOperation = 'source-over';
 
   drawLoadedBall(ctx, game, p, m, R, ready, time);
-  drawAim(ctx, game, p, m, R, W, H, ready, paint);
+  drawAim(ctx, game, p, m, R, W, H, ready);
 }
 
 /** The dark disc and the ring around it. */
@@ -404,10 +406,17 @@ interface AimGeometry {
 /**
  * The dashed shaft and its two head strokes.
  *
- * Drawn twice: a white pass underneath that keeps the arrow legible over the
- * magenta background, then the team-coloured pass over it. `widen` is what
- * separates them — the white pass is 1.5px broader on both strokes so it reads
- * as an outline rather than a second arrow.
+ * Drawn twice: an outline pass underneath that keeps the arrow legible over the
+ * background, then the power-coloured pass over it. `widen` is what separates
+ * them — the outline is 1.5px broader on both strokes so it reads as an edge
+ * rather than as a second arrow.
+ *
+ * That outline was white until the arrow itself became white at low power, which
+ * left a white arrow edged in white over whatever it crossed. It is `VOID` now:
+ * a dark edge separates both ends of the ramp from the liquid background, whose
+ * currents add up to a pale lavender (`CURRENT_CEILING` in `VisualFX.ts`) where
+ * several overlap. The glow the white pass used to give is kept as a shadow in
+ * the arrow's own colour, so a hot arrow now glows red instead of white.
  */
 function strokeAim(ctx: CanvasRenderingContext2D, g: AimGeometry, color: string, widen: number) {
   ctx.setLineDash(AIM_DASH);
@@ -438,15 +447,20 @@ function drawAim(
   R: number,
   W: number,
   H: number,
-  ready: boolean,
-  paint: LauncherPaint
+  ready: boolean
 ) {
   const dir = aimDirOf(p);
   const reach = aimReachOf(p, W, H, game.twoPlayer);
   const fade = ready ? 1 : 0.35;
-  // The arrow turns pink for either player once the throw would boom on impact.
-  const boom = throwSpeedOf(p, game.twoPlayer) >= PhysicsConfig.BOOM_SPEED;
-  const aimColor = rgba(boom ? PINK : paint.body, +((0.65 + 0.35 * p.strength) * fade).toFixed(3));
+  // White at the weakest throw, red once the throw would boom on impact. The
+  // arrow reported that threshold before too, by switching from the player's
+  // colour to pink; it is a ramp now, and `boomHeatOf` puts the top of it where
+  // the ball really booms rather than where the old test said it did. No
+  // `LauncherPaint` reaches this function any more: it is the same arrow for
+  // both players, told apart by which bay it grows out of.
+  const heat = boomHeatOf(p, game.twoPlayer);
+  const aimRgb = mix(WHITE, AIM_HOT, heat);
+  const aimColor = rgba(aimRgb, +((0.65 + 0.35 * p.strength) * fade).toFixed(3));
 
   const g: AimGeometry = {
     fromX: m.x + Math.cos(dir) * R * 1.1,
@@ -461,11 +475,11 @@ function drawAim(
 
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
-  ctx.shadowColor = rgba(WHITE, +(0.6 * fade).toFixed(3));
+  ctx.shadowColor = rgba(aimRgb, +(0.6 * fade).toFixed(3));
   ctx.shadowBlur = 10;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 0;
-  strokeAim(ctx, g, rgba(WHITE, +(0.35 * fade).toFixed(3)), 1.5);
+  strokeAim(ctx, g, rgba(VOID, +(0.55 * fade).toFixed(3)), 1.5);
   ctx.restore();
 
   ctx.globalCompositeOperation = 'lighter';

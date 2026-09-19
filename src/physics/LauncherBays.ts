@@ -80,6 +80,42 @@ export function throwSpeedOf(p: LauncherPlayer, _twoPlayer?: boolean): number {
 }
 
 /**
+ * How close a throw is to booming on impact: 0 at the weakest throw the bay can
+ * make, 1 once it reaches `BOOM_SPEED`, and 1 for everything harder.
+ *
+ * This is the aim arrow's colour — white at 0, red at 1 — so the arrow reports
+ * the one thing about power that decides what happens: whether the ball will
+ * boom the group it hits. The arrow used to say the same thing as a switch from
+ * the player's colour to pink at exactly this threshold, which is the point that
+ * is preserved here: heat reaches 1 where the switch used to flip.
+ *
+ * The floor is the speed at zero strength rather than zero, because a bay never
+ * throws slower than `THROW_MIN` and an arrow that starts a third of the way up
+ * its own ramp does not read as weak. The threshold above it moves with the
+ * `boom` and `maxpower` knobs, which is why it is read from `BOOM_SPEED` each
+ * time rather than turned into a strength once. Low enough settings of the two
+ * — `boom` 0.2 with `maxpower` 600 — put the threshold under the floor, meaning
+ * every throw booms; the heat is then 1 throughout, which is the truth about
+ * that combination rather than a case to guard against.
+ *
+ * **`KICK` is why this is not just `throwSpeedOf`.** The ball leaves the bay at
+ * `throwSpeedOf(p) * KICK` — `spawn` applies the multiplier, not this function —
+ * so comparing the unmultiplied speed against `BOOM_SPEED` answers a question
+ * about a ball nobody throws. The old pink cue did exactly that and was wrong by
+ * the size of the `kick` knob in whichever direction it pointed: late at the
+ * default 1.2x, where it turned pink at strength 0.35 but the ball boomed from
+ * 0.29, and early in Drift at 0.6x, where it promised a boom that did not come.
+ * It was exact only in Relax, the one preset at 1.0x.
+ */
+export function boomHeatOf(p: LauncherPlayer, twoPlayer?: boolean): number {
+  const launched = PhysicsConfig.KICK;
+  const floor = PhysicsConfig.THROW_MIN * PhysicsConfig.DUEL_POWER * PhysicsConfig.SC * launched;
+  const span = PhysicsConfig.BOOM_SPEED - floor;
+  if (span <= 0) return 1;
+  return Math.max(0, Math.min(1, (throwSpeedOf(p, twoPlayer) * launched - floor) / span));
+}
+
+/**
  * Scratch for `mouthPenetration`, the scalar form of `mouthNormalAt`.
  *
  * The relax pass tests every member of every group against both bays on each of

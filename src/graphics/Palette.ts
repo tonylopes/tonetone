@@ -38,6 +38,23 @@ export function rgba(c: Rgb, alpha: number): string {
   return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + alpha + ')';
 }
 
+/**
+ * A colour `t` of the way from `a` to `b`, per channel, rounded to whole bytes.
+ *
+ * Channels are mixed as they are stored, so a ramp between two saturated hues
+ * passes through a pale middle rather than around the colour wheel. That is what
+ * the aim arrow wants — `WHITE` to `AIM_HOT` reads as heating up — and it is not
+ * what a hue sweep would want.
+ */
+export function mix(a: Rgb, b: Rgb, t: number): Rgb {
+  const k = Math.max(0, Math.min(1, t));
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * k),
+    Math.round(a[1] + (b[1] - a[1]) * k),
+    Math.round(a[2] + (b[2] - a[2]) * k),
+  ];
+}
+
 // ── Brand and UI ───────────────────────────────────────────────────────────
 // These four are mirrored by custom properties in `index.css`, and
 // `tests/graphics/Palette.test.ts` fails if the two copies disagree.
@@ -65,6 +82,19 @@ export const INK: Rgb = [0xf3, 0xe7, 0xff];
 
 /** The field's backdrop, painted flat once the match is over. */
 export const FIELD_BG: Rgb = [0x14, 0x0a, 0x2b];
+
+/**
+ * The aim arrow at full force: the hot end of the `WHITE` to `AIM_HOT` ramp the
+ * arrow is painted along.
+ *
+ * The arrow used to wear the player's own colour, turning `PINK` for both of
+ * them once the throw would boom. That made it a fourth thing cyan and pink
+ * meant — player, launcher, and now power — and in a duel player 2's arrow was
+ * the boom colour at every strength. Red belongs to nothing else on the table:
+ * it is CIEDE2000 38.0 from `PINK` and 62.5 from `CYAN`, so a hot arrow cannot
+ * be read as a player, and its nearest ball is the gold at 37.6.
+ */
+export const AIM_HOT: Rgb = [0xff, 0x2b, 0x18];
 
 // ── Menu ───────────────────────────────────────────────────────────────────
 // The menu screen keeps two brand colours of its own. A third, `#ff00aa`, was

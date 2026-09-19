@@ -8,6 +8,7 @@ import {
   aimReachOf,
   aimAt,
   throwSpeedOf,
+  boomHeatOf,
   mouthNormalAt,
   clearExempt,
 } from '../../src/physics/LauncherBays';
@@ -199,6 +200,82 @@ describe('LauncherBays module', () => {
       p.strength = PhysicsConfig.BOOM_AT;
       const speedAtThreshold = throwSpeedOf(p, false);
       expect(speedAtThreshold).toBeGreaterThanOrEqual(PhysicsConfig.BOOM_SPEED);
+    });
+  });
+
+  describe('boomHeatOf', () => {
+    it('reads 0 at the weakest throw and 1 once the throw would boom', () => {
+      const p = makeLauncher(1);
+
+      p.strength = 0;
+      expect(boomHeatOf(p, false)).toBe(0);
+
+      // The heat reaches 1 exactly where throwSpeedOf reaches BOOM_SPEED, which
+      // is the threshold the arrow used to report by switching colour outright.
+      p.strength = 1;
+      expect(boomHeatOf(p, false)).toBe(1);
+    });
+
+    it('rises with strength and saturates at the threshold rather than at full power', () => {
+      const p = makeLauncher(1);
+      const heats = [0, 0.1, 0.2, 0.3].map((s) => {
+        p.strength = s;
+        return boomHeatOf(p, false);
+      });
+      for (let i = 1; i < heats.length; i++) {
+        expect(heats[i]).toBeGreaterThan(heats[i - 1]);
+      }
+
+      // Find where it saturates and check that it is the boom threshold, not 1.0
+      // strength: a throw that booms is not the hardest throw the bay can make.
+      let saturatedAt = 1;
+      for (let s = 0; s <= 1; s += 0.01) {
+        p.strength = s;
+        if (boomHeatOf(p, false) >= 1) { saturatedAt = s; break; }
+      }
+      expect(saturatedAt).toBeLessThan(1);
+      p.strength = saturatedAt;
+      // What booms is the speed the ball actually leaves at, which `spawn`
+      // multiplies by KICK — the arrow has to answer that question, not the
+      // unmultiplied one.
+      expect(throwSpeedOf(p, false) * PhysicsConfig.KICK).toBeGreaterThanOrEqual(PhysicsConfig.BOOM_SPEED);
+    });
+
+    it('reaches red where the ball really booms, KICK included', () => {
+      // At the shipped kick of 1.2x the old pink cue was late: pink at strength
+      // 0.35, booming from 0.29. Walk the range and check the heat saturates on
+      // the launched speed, not on throwSpeedOf alone.
+      const p = makeLauncher(1);
+      for (let s = 0; s <= 1; s += 0.01) {
+        p.strength = s;
+        const booms = throwSpeedOf(p, false) * PhysicsConfig.KICK >= PhysicsConfig.BOOM_SPEED;
+        expect(boomHeatOf(p, false) >= 1).toBe(booms);
+      }
+    });
+
+    it('is the same in solo and in a duel, as the speed behind it is', () => {
+      const p = makeLauncher(1);
+      p.strength = 0.25;
+      expect(boomHeatOf(p, false)).toBe(boomHeatOf(p, true));
+    });
+
+    it('is 1 throughout when the knobs put the threshold under the weakest throw', () => {
+      // `boom` 0.2 with `maxpower` 600 is a reachable pair, and it means every
+      // throw booms. A fully red arrow is then the truth, not a clamp artefact.
+      const before = { at: PhysicsConfig.BOOM_AT, max: PhysicsConfig.THROW_MAX };
+      try {
+        PhysicsConfig.BOOM_AT = 0.2;
+        PhysicsConfig.THROW_MAX = 600;
+        recalcThresholds(620);
+        const p = makeLauncher(1);
+        p.strength = 0;
+        expect(throwSpeedOf(p, false) * PhysicsConfig.KICK).toBeGreaterThan(PhysicsConfig.BOOM_SPEED);
+        expect(boomHeatOf(p, false)).toBe(1);
+      } finally {
+        PhysicsConfig.BOOM_AT = before.at;
+        PhysicsConfig.THROW_MAX = before.max;
+        recalcThresholds(620);
+      }
     });
   });
 

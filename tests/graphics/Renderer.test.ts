@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { drawPops, drawOneLauncher, popCenterX, POP_EDGE_PAD, RenderContext, P_COLOR } from '../../src/graphics/Renderer';
-import { CYAN, PINK, rgba } from '../../src/graphics/Palette';
+import { AIM_HOT, CYAN, PINK, VOID, WHITE, rgba } from '../../src/graphics/Palette';
+import { recalcThresholds } from '../../src/physics/Config';
+import { restoreConfig, snapshotConfig } from '../../src/sim/Knobs';
 import { createGame } from '../../src/game/GameState';
 
 function createMockContext() {
@@ -107,11 +109,8 @@ describe('Renderer module - popCenterX', () => {
 });
 
 describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
-  it('renders arrow head with the exact same strokeStyle as the dotted line and scales width and length with strength', () => {
-    // Taken from the palette rather than spelled out, so a colour decision moves
-    // this test with it instead of breaking it.
-    const cyanPrefix = rgba(CYAN, 0).slice(0, -2);
-    const pinkPrefix = rgba(PINK, 0).slice(0, -2);
+  /** A canvas context that remembers every stroke colour and width set on it. */
+  function recordingContext() {
     const strokeStyles: string[] = [];
     const lineWidths: number[] = [];
     const ctx = {
@@ -150,7 +149,17 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
         lineWidths.push(val);
       },
     } as unknown as CanvasRenderingContext2D;
+    return { ctx, strokeStyles, lineWidths };
+  }
 
+  /**
+   * Draws one launcher's arrow and reports what it was painted with.
+   *
+   * The last two stroke colours are the arrow's own pass — the dashed shaft and
+   * then the two head strokes — which follow the wider outline pass underneath.
+   */
+  function drawArrow(strength: number, playerIndex = 0) {
+    const { ctx, strokeStyles, lineWidths } = recordingContext();
     const rc: RenderContext = {
       cv: {} as any,
       ctx,
@@ -161,40 +170,78 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
       bgW: 100,
       bgH: 100,
     };
-
     const game = createGame();
-    const p = game.players[0];
+    const p = game.players[playerIndex];
     p.reload = 0;
-
-    // Test low strength (non-boom)
-    p.strength = 0.2;
+    p.strength = strength;
     drawOneLauncher(rc, game, p, 0);
+    return {
+      shaft: strokeStyles[strokeStyles.length - 2],
+      head: strokeStyles[strokeStyles.length - 1],
+      all: strokeStyles,
+      width: lineWidths[lineWidths.length - 1],
+    };
+  }
 
-    const lowStrokes = strokeStyles.slice(-2);
-    expect(lowStrokes[0]).toBe(lowStrokes[1]); // Dotted line & arrow share identical color
-    expect(lowStrokes[0]).toContain(cyanPrefix); // P1's colour
-    const lowWidth = lineWidths[lineWidths.length - 1];
-    expect(lowWidth).toBeCloseTo(3.1); // 2.5 + 0.2 * 3 = 3.1
+  /** The three channels of an `rgba(r,g,b,a)` string the palette wrote. */
+  function channels(style: string): number[] {
+    const m = style.match(/^rgba\((\d+),(\d+),(\d+),/);
+    expect(m, style).not.toBeNull();
+    return [Number(m![1]), Number(m![2]), Number(m![3])];
+  }
 
-    // Test high strength (boom mode)
-    p.strength = 0.9;
-    drawOneLauncher(rc, game, p, 0);
+  // The thresholds the heat is measured against are derived from the height, and
+  // are module state shared with every other test in this process.
+  const snap = snapshotConfig();
+  beforeEach(() => recalcThresholds(600));
+  afterEach(() => restoreConfig(snap));
 
-    const highStrokes = strokeStyles.slice(-2);
-    expect(highStrokes[0]).toBe(highStrokes[1]); // Dotted line & arrow share identical color
-    expect(highStrokes[0]).toContain(pinkPrefix); // the boom magenta
-    const highWidth = lineWidths[lineWidths.length - 1];
-    expect(highWidth).toBeCloseTo(5.2); // 2.5 + 0.9 * 3 = 5.2
+  it('paints the arrow along a white-to-red power ramp, ending at the boom threshold', () => {
+    const weak = drawArrow(0);
+    const mid = drawArrow(0.2);
+    const hard = drawArrow(0.9);
 
-    // Both colors changed synchronously between low and high strength
-    expect(lowStrokes[0]).not.toBe(highStrokes[0]);
-    expect(lowStrokes[1]).not.toBe(highStrokes[1]);
+    // The weakest throw the bay can make is white, and anything at or past the
+    // speed that booms on impact is the full red. 0.9 is far past it.
+    expect(channels(weak.shaft)).toEqual([...WHITE]);
+    expect(channels(hard.shaft)).toEqual([...AIM_HOT]);
 
-    // Verify translucent white glow contrast pass was recorded in strokeStyles.
-    // The colour is built by the palette's `rgba` helper, so it is spelled
-    // without spaces; assert on the prefix rather than on one exact alpha.
-    expect(strokeStyles.some((s) => s.startsWith('rgba(255,255,255,'))).toBe(true);
+    // In between it is neither: white's red channel is already 255, so it is the
+    // other two that fall as the throw heats up.
+    const [r, g, b] = channels(mid.shaft);
+    expect(r).toBe(255);
+    expect(g).toBeGreaterThan(AIM_HOT[1]);
+    expect(g).toBeLessThan(255);
+    expect(b).toBeGreaterThan(AIM_HOT[2]);
+    expect(b).toBeLessThan(255);
+
+    // The shaft and the head are one arrow and are always painted alike.
+    expect(weak.shaft).toBe(weak.head);
+    expect(mid.shaft).toBe(mid.head);
+    expect(hard.shaft).toBe(hard.head);
+  });
+
+  it('gives both players the same arrow, so its colour reads as power and not as whose turn it is', () => {
+    // This is the whole point of the ramp: the arrow used to be cyan for player
+    // 1 and pink for player 2, and pink again for either of them once the throw
+    // would boom — so player 2's arrow was the boom colour at every strength.
+    for (const strength of [0, 0.2, 0.9]) {
+      expect(drawArrow(strength, 1).shaft).toBe(drawArrow(strength, 0).shaft);
+    }
+    expect(drawArrow(0.2, 1).shaft).not.toContain(rgba(PINK, 0).slice(0, -2));
+    expect(drawArrow(0.2, 0).shaft).not.toContain(rgba(CYAN, 0).slice(0, -2));
+  });
+
+  it('scales the arrow head width with strength', () => {
+    expect(drawArrow(0.2).width).toBeCloseTo(3.1); // 2.5 + 0.2 * 3
+    expect(drawArrow(0.9).width).toBeCloseTo(5.2); // 2.5 + 0.9 * 3
+  });
+
+  it('edges the arrow in the dark void, which a white arrow needs and a white outline cannot give', () => {
+    const voidPrefix = rgba(VOID, 0).slice(0, -2);
+    for (const strength of [0, 0.9]) {
+      const drawn = drawArrow(strength);
+      expect(drawn.all.some((style) => style.startsWith(voidPrefix))).toBe(true);
+    }
   });
 });
-
-
