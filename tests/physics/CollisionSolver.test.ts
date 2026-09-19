@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   forEachPair,
   award,
-  popText,
-  boomLabel,
   boomGroup,
   detach,
   ageGhosts,
@@ -60,53 +58,6 @@ describe('CollisionSolver physics module', () => {
     });
   });
 
-  describe('boomLabel', () => {
-    it('steps the word up with the size of the boom', () => {
-      expect(boomLabel(4, false)).toBe('');
-      expect(boomLabel(5, false)).toBe('DOUBLE');
-      expect(boomLabel(9, false)).toBe('DOUBLE');
-      expect(boomLabel(10, false)).toBe('SUPER');
-      expect(boomLabel(14, false)).toBe('SUPER');
-      expect(boomLabel(15, false)).toBe('MEGA');
-      expect(boomLabel(19, false)).toBe('MEGA');
-      expect(boomLabel(20, false)).toBe('GIGA');
-      expect(boomLabel(40, false)).toBe('GIGA');
-    });
-
-    it('uses the same tier boundaries as the boom voice the player hears', () => {
-      // getBoomProps is synthesized in tiers at 0..4, 5..9, 10..14,
-      // 15..19 and 20+. The word and the sound must step together.
-      for (const [count, word] of [[4, ''], [5, 'DOUBLE'], [10, 'SUPER'], [15, 'MEGA'], [20, 'GIGA']] as const) {
-        expect(boomLabel(count, false)).toBe(word);
-      }
-    });
-
-    it('reserves BOOM! for the white-on-black hit', () => {
-      expect(boomLabel(3, true)).toBe('BOOM!');
-      expect(boomLabel(3, false)).toBe('');
-    });
-
-    it('combines the tier with BOOM! when a white-on-black hit is also big', () => {
-      expect(boomLabel(12, true)).toBe('SUPER BOOM!');
-      expect(boomLabel(25, true)).toBe('GIGA BOOM!');
-    });
-  });
-
-  describe('popText', () => {
-    it('puts the boom word beside the points', () => {
-      expect(popText(7, 'boom', { count: 6, whiteBlack: false })).toBe('+7 DOUBLE');
-      expect(popText(13, 'boom', { count: 11, whiteBlack: false })).toBe('+13 SUPER');
-      expect(popText(96, 'boom', { count: 12, whiteBlack: true })).toBe('+96 SUPER BOOM!');
-    });
-
-    it('leaves a small boom, and every lock and peel, as bare points', () => {
-      expect(popText(9, 'boom', { count: 3, whiteBlack: false })).toBe('+9');
-      expect(popText(12, 'lock')).toBe('+12');
-      expect(popText(23, 'peel')).toBe('+23');
-      expect(popText(7)).toBe('+7');
-    });
-  });
-
   describe('award', () => {
     it('increments player score and records category points', () => {
       award(state, 0, 10, 400, 300, 'lock');
@@ -114,7 +65,9 @@ describe('CollisionSolver physics module', () => {
       expect(state.players[0].score).toBe(10);
       expect(state.players[0].lockPts).toBe(10);
       expect(state.pops.length).toBe(1);
-      expect(state.pops[0].text).toBe('+10');
+      // The solver records what was paid, not the words. The wording is
+      // asserted in tests/graphics/PopText.test.ts.
+      expect(state.pops[0].label).toEqual({ points: 10, source: 'lock', boom: undefined });
     });
 
     it('ignores invalid player index or non-positive points', () => {

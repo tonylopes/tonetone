@@ -95,11 +95,37 @@ export interface Flash {
   kind: 'bond' | 'break' | 'spawn' | 'blocked';
 }
 
+/** What a boom looked like, for the word its pop earns. */
+export interface BoomShape {
+  count: number;
+  whiteBlack: boolean;
+}
+
+/**
+ * What a pop says.
+ *
+ * A scoring pop carries the **facts** — the points it paid and, for a boom, its
+ * shape — and the words are chosen where it is drawn. The solver used to build
+ * the string itself, which put on-screen wording inside the physics and meant
+ * `+96 SUPER BOOM!` was decided three layers below the canvas. This is the same
+ * move `SoundEvent` already makes for sound: world facts out, presentation
+ * elsewhere.
+ *
+ * The attract screen and the results celebration have no points to report, so
+ * they carry their word directly.
+ */
+export type PopLabel =
+  | { text: string }
+  | { points: number; source?: ScoreSource; boom?: BoomShape };
+
+/** Which counter a scoring event pays into. */
+export type ScoreSource = 'lock' | 'boom' | 'peel';
+
 export interface Pop {
   x: number;
   y: number;
   t: number;
-  text: string;
+  label: PopLabel;
   who: number;
 }
 

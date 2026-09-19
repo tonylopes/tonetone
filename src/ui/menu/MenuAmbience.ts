@@ -9,6 +9,7 @@ import { uiFont } from '../../graphics/Fonts';
 import { colorOfKind, randomKind } from '../../game/Rules';
 import { BLACK_HEX, MENU_CYAN, MENU_PINK_DEEP, PINK, Rgb, WHITE, WHITE_HEX, hex, rgb, rgba } from '../../graphics/Palette';
 import { P_COLOR } from '../../graphics/Renderer';
+import { popText } from '../../graphics/PopText';
 import { TAU } from '../../math';
 
 /**
@@ -290,7 +291,7 @@ function spawnMenuPop(width: number, height: number) {
     x: px,
     y: py,
     t: 0,
-    text: txt,
+    label: { text: txt },
     who: w,
     vy: -(Math.random() * 0.4 + 0.5)
   });
@@ -336,11 +337,12 @@ export function drawMenuPops(c: CanvasRenderingContext2D, width: number, height:
     c.shadowColor = color;
     c.shadowBlur = 12;
     c.fillStyle = color;
-    c.fillText(pop.text, 0, -k * 30);
+    const text = popText(pop.label);
+    c.fillText(text, 0, -k * 30);
 
     c.fillStyle = WHITE_HEX;
     c.shadowBlur = 4;
-    c.fillText(pop.text, 0, -k * 30);
+    c.fillText(text, 0, -k * 30);
 
     c.restore();
   }

@@ -109,7 +109,7 @@ export function updateResultsEffects(game: Game, dt: number, W: number, H: numbe
       ? randBetween(band.top + pad, band.bottom - pad)
       : randBetween(band.top + 70, band.bottom - pad);
     const rx = randBetween(W * 0.15, W * 0.85);
-    game.pops.push({ x: rx, y: ry, t: 0, text: txt, who: winnerIdx });
+    game.pops.push({ x: rx, y: ry, t: 0, label: { text: txt }, who: winnerIdx });
 
     if (AudioStore.soundOn && !isOptionsOpen() && Math.random() < 0.4) {
       const normX = panOf(rx, W);

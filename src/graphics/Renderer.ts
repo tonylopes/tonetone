@@ -6,6 +6,7 @@ import { BG_SCALE, FIELD_RING, FLASH_SPECS, RESULTS_RING, drawLiquid, drawRipple
 import { BLACK_HEX, CYAN, FIELD_BG, MENU_CYAN, PINK, Rgb, WHITE, WHITE_HEX, hex, rgba } from './Palette';
 import { FLASH_LIFE, POP_LIFE } from '../physics/Types';
 import { setHidden } from '../ui/Dom';
+import { popText } from './PopText';
 import { aimDirOf, aimReachOf, launchPointOf, mouthRadius, throwSpeedOf } from '../physics/LauncherBays';
 import { LauncherPlayer } from '../physics/Types';
 import { kindLabel } from '../game/Rules';
@@ -209,7 +210,8 @@ export function drawPops(rc: RenderContext, game: Game) {
     // A pop is centred on the event that earned it, and now carries a word as
     // well as its points, so one earned against a side wall would hang off the
     // screen. Slide it back on rather than letting it clip.
-    ctx.translate(popCenterX(f.x, ctx.measureText(f.text).width, W), f.y);
+    const text = popText(f.label);
+    ctx.translate(popCenterX(f.x, ctx.measureText(text).width, W), f.y);
     if (game.twoPlayer && f.who === 1) ctx.rotate(Math.PI);
     ctx.globalAlpha = Math.max(0, 1 - k * k);
     ctx.fillStyle = P_COLOR[f.who] || WHITE_HEX;
@@ -217,7 +219,7 @@ export function drawPops(rc: RenderContext, game: Game) {
     ctx.shadowBlur = 10;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
-    ctx.fillText(f.text, 0, -k * 34);
+    ctx.fillText(text, 0, -k * 34);
     ctx.restore();
   }
   ctx.globalAlpha = 1;
@@ -512,11 +514,12 @@ export function drawResultsCanvas(rc: RenderContext, game: Game) {
       ctx.shadowColor = color;
       ctx.shadowBlur = 14;
       ctx.fillStyle = color;
-      ctx.fillText(f.text, 0, -k * 34);
+      const text = popText(f.label);
+      ctx.fillText(text, 0, -k * 34);
 
       ctx.fillStyle = WHITE_HEX;
       ctx.shadowBlur = 4;
-      ctx.fillText(f.text, 0, -k * 34);
+      ctx.fillText(text, 0, -k * 34);
       ctx.restore();
     }
     ctx.restore();

@@ -46,8 +46,8 @@ describe('Renderer module - drawPops', () => {
 
     const game = createGame();
     game.pops = [
-      { x: 100, y: 200, t: 0.2, text: '+15', who: 0 },
-      { x: 300, y: 400, t: 0.2, text: '+30', who: 1 },
+      { x: 100, y: 200, t: 0.2, label: { text: '+15' }, who: 0 },
+      { x: 300, y: 400, t: 0.2, label: { text: '+30' }, who: 1 },
     ];
 
     drawPops(rc, game);
@@ -78,9 +78,9 @@ describe('Renderer module - drawPops', () => {
     const game = createGame();
     // '+120 BOOM' is 9 characters, so 90px wide under the mock's metrics.
     game.pops = [
-      { x: 2, y: 200, t: 0, text: '+120 BOOM', who: 0 },
-      { x: 398, y: 300, t: 0, text: '+120 BOOM', who: 0 },
-      { x: 200, y: 400, t: 0, text: '+120 BOOM', who: 0 },
+      { x: 2, y: 200, t: 0, label: { text: '+120 BOOM' }, who: 0 },
+      { x: 398, y: 300, t: 0, label: { text: '+120 BOOM' }, who: 0 },
+      { x: 200, y: 400, t: 0, label: { text: '+120 BOOM' }, who: 0 },
     ];
 
     drawPops(rc, game);

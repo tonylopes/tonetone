@@ -1,9 +1,66 @@
-import { Ball, FLASH_LIFE, Flash, Group, LauncherPlayer, POP_LIFE, Pop, Shot, SoundEvent } from './Types';
+import { Ball, BoomShape, FLASH_LIFE, Flash, Group, LauncherPlayer, POP_LIFE, Pop, ScoreSource, Shot, SoundEvent } from './Types';
 import { PhysicsConfig } from './Config';
 import { rebuildGroups, separateGroups, shiftGroup, syncGroup } from './RigidBody';
 import { clearExempt, mouthClamp, mouthCollide } from './LauncherBays';
-import { NO_CREDIT, SHOT_DECAY, boomPay, boomTierWord, boomsOn, lockPay, peelPay } from '../game/Rules';
+import { NO_CREDIT, SHOT_DECAY, boomPay, boomsOn, lockPay, peelPay } from '../game/Rules';
 import { TAU } from '../math';
+
+/**
+ * Numbers that shape how the game plays but are not knobs.
+ *
+ * They stay here rather than in `PhysicsConfig`, which is the tuning surface the
+ * panel exposes and the harness snapshots: filling it with solver internals
+ * makes the real knobs harder to find. Anything here that becomes worth a slider
+ * should move there, and gain an entry in the knob registry with it.
+ *
+ * Several are numerically equal to unrelated values elsewhere and must not be
+ * merged with them: `SPIN_CAP` is 12 like the default ball radius and
+ * `RULE_SPEED`, and `SPIN_STOP` is 0.02 like `relax`'s overlap slop.
+ */
+
+/** Debris never leaves a boom slower than this (x SC), so a boom always scatters. */
+const DEBRIS_MIN_SPEED = 200;
+/** One ball in ten keeps whatever speed the boom gave it. See Scoring in Notion. */
+const DEBRIS_UNCAPPED_FRACTION = 0.1;
+/**
+ * The rest are held just under the boom threshold (x BOOM_SPEED).
+ *
+ * Debris that can boom on its own turns one throw into a runaway chain; the
+ * uncapped tenth is what keeps the occasional one possible.
+ */
+const DEBRIS_SPEED_CAP = 0.95;
+
+/** A peeled ball is kicked out at least this fast (x SC). */
+const PEEL_MIN_SPEED = 90;
+/** The floor of the kick's range, as a fraction of the impact that caused it. */
+const PEEL_IMPACT_LO = 0.35;
+/** The kick's range is never narrower than this, so it keeps some spread. */
+const PEEL_SPEED_SPAN = 30;
+/** The ceiling of the kick's range, as a fraction of the impact. */
+const PEEL_IMPACT_HI = 1.4;
+
+/** A white ball always strikes at least this hard (x BOOM_SPEED), so it never fails to boom. */
+const WHITE_HIT_IMPACT = 1.2;
+
+/**
+ * How long one pair of balls is ignored after it scores, in seconds.
+ *
+ * Two groups in contact stay in contact for many substeps; without this, one
+ * touch would score on every one of them.
+ */
+const PAIR_COOLDOWN = 0.2;
+/** Above this many remembered pairs, sweep out the ones whose balls are gone. */
+const LAST_HIT_SWEEP_AT = 150;
+/** If the sweep did not get it under control, drop the lot. */
+const LAST_HIT_CLEAR_AT = 500;
+
+/** Spin slower than this (rad/s) is treated as none, so groups come to rest. */
+const SPIN_STOP = 0.02;
+/** Spin is clamped here (rad/s); past it a group is a blur and reads as a glitch. */
+const SPIN_CAP = 12;
+
+/** How many passes `relax` makes at the overlaps each substep. */
+export const RELAX_ITERATIONS = 24;
 
 export interface CollisionState {
   balls: Ball[];
@@ -33,7 +90,7 @@ export function forEachPair(balls: Ball[], fn: (a: Ball, b: Ball) => void) {
   const cell = 2 * PhysicsConfig.R + 2;
   const grid = new Map<string, Ball[]>();
   // Cell coordinates are remembered alongside their buckets rather than parsed
-  // back out of the keys. `relax` runs this sweep up to 24 times per substep,
+  // back out of the keys. `relax` runs this sweep RELAX_ITERATIONS times per substep,
   // and re-splitting every key on every pass costs more than carrying them.
   const buckets: Ball[][] = [];
   const cellX: number[] = [];
@@ -72,40 +129,11 @@ export function forEachPair(balls: Ball[], fn: (a: Ball, b: Ball) => void) {
 }
 
 /**
- * The word beside a boom's points: a size tier, and BOOM! for a white-on-black hit.
- *
- * BOOM! is reserved for the white-on-black hit — the only way a black ball ever
- * leaves the table, and the boom that already gets its own lifted boom. Every
- * other boom shows its tier alone (`+7 DOUBLE`, `+13 SUPER`), so the loudest
- * word in the game stays attached to its rarest event. The two compose: a
- * white-on-black hit that takes 12 balls with it reads `+96 SUPER BOOM!`.
- */
-export function boomLabel(count: number, whiteBlack: boolean): string {
-  const words = [];
-  const tierWord = boomTierWord(count);
-  if (tierWord) words.push(tierWord);
-  if (whiteBlack) words.push('BOOM!');
-  return words.join(' ');
-}
-
-/** What a boom looked like, for the word on its pop. */
-export interface BoomShape {
-  count: number;
-  whiteBlack: boolean;
-}
-
-/** The text of a scoring pop: the points it paid, and what the boom earned. */
-export function popText(points: number, source?: 'lock' | 'boom' | 'peel', boom?: BoomShape): string {
-  const label = source === 'boom' && boom ? boomLabel(boom.count, boom.whiteBlack) : '';
-  return label ? '+' + points + ' ' + label : '+' + points;
-}
-
-/**
  * Pay `who` for one scoring event. When the event came from a throw, each
  * further event that throw causes pays SHOT_DECAY times the one before, so a
  * ball that keeps bumping into things does not keep earning full value.
  */
-export function award(state: CollisionState, who: number, points: number, x: number, y: number, source?: 'lock' | 'boom' | 'peel', shot?: Shot, boom?: BoomShape) {
+export function award(state: CollisionState, who: number, points: number, x: number, y: number, source?: ScoreSource, shot?: Shot, boom?: BoomShape) {
   if (!(who >= 0) || !state.players[who] || points <= 0) return;
   if (shot) {
     points = Math.round(points * Math.pow(SHOT_DECAY, shot.events));
@@ -119,7 +147,7 @@ export function award(state: CollisionState, who: number, points: number, x: num
     else if (source === 'boom') p.boomPts += points;
     else if (source === 'peel') p.peelPts += points;
   }
-  state.pops.push({ x, y, t: 0, text: popText(points, source, boom), who });
+  state.pops.push({ x, y, t: 0, label: { points, source, boom }, who });
   if (state.pops.length > 40) state.pops.shift();
 }
 
@@ -193,11 +221,11 @@ export function boomGroup(state: CollisionState, g: Group, impact: number, opts:
   for (const b of destroyedMembers) {
     const dir = Math.random() * TAU;
     let sp = Math.max(
-      200 * PhysicsConfig.SC,
+      DEBRIS_MIN_SPEED * PhysicsConfig.SC,
       impact * (PhysicsConfig.GHOST_SPREAD_LO + Math.random() * (PhysicsConfig.GHOST_SPREAD_HI - PhysicsConfig.GHOST_SPREAD_LO))
     );
-    if (Math.random() >= 0.1) {
-      sp = Math.min(sp, PhysicsConfig.BOOM_SPEED * 0.95);
+    if (Math.random() >= DEBRIS_UNCAPPED_FRACTION) {
+      sp = Math.min(sp, PhysicsConfig.BOOM_SPEED * DEBRIS_SPEED_CAP);
     }
     b.group.vx = Math.cos(dir) * sp;
     b.group.vy = Math.sin(dir) * sp;
@@ -226,8 +254,8 @@ export function detach(state: CollisionState, b: Ball, impact?: number, opts: Pe
   state.groups = rebuildGroups(state.balls, state.byId);
 
   const hit = impact || PhysicsConfig.KICKOUT_MIN;
-  const lo = Math.max(90 * PhysicsConfig.SC, hit * 0.35);
-  const hi = Math.max(lo + 30, Math.min(PhysicsConfig.KICKOUT_MAX, hit * 1.4));
+  const lo = Math.max(PEEL_MIN_SPEED * PhysicsConfig.SC, hit * PEEL_IMPACT_LO);
+  const hi = Math.max(lo + PEEL_SPEED_SPAN, Math.min(PhysicsConfig.KICKOUT_MAX, hit * PEEL_IMPACT_HI));
   const dir = Math.random() * TAU;
   const speed = (lo + Math.random() * (hi - lo)) * PhysicsConfig.KICK;
   b.group.vx = Math.cos(dir) * speed;
@@ -260,7 +288,7 @@ export function ageGhosts(state: CollisionState, dt: number) {
     state.groups = rebuildGroups(state.balls, state.byId);
   }
 
-  if (state.lastHit.size > 150) {
+  if (state.lastHit.size > LAST_HIT_SWEEP_AT) {
     for (const [key] of state.lastHit) {
       const pipe = key.indexOf('|');
       if (pipe > 0) {
@@ -271,7 +299,7 @@ export function ageGhosts(state: CollisionState, dt: number) {
         }
       }
     }
-    if (state.lastHit.size > 500) {
+    if (state.lastHit.size > LAST_HIT_CLEAR_AT) {
       state.lastHit.clear();
     }
   }
@@ -370,7 +398,7 @@ export function collide(state: CollisionState, now: number) {
 
     if (-rvn < PhysicsConfig.RULE_SPEED * PhysicsConfig.SC) return;
     const key = a.id + '|' + b.id;
-    if (now - (state.lastHit.get(key) || -9) < 0.2) return;
+    if (now - (state.lastHit.get(key) || -9) < PAIR_COOLDOWN) return;
     state.lastHit.set(key, now);
 
     const struck = pushA >= pushB ? b : a;
@@ -446,7 +474,7 @@ export function collide(state: CollisionState, now: number) {
     if (!state.byId.has(h.w.id) || !h.w.special) continue;
     const target = h.other.group;
     if (target && target.members.length && !h.other.ghost) {
-      boomGroup(state, target, Math.max(PhysicsConfig.BOOM_SPEED * 1.2, h.impact), { credit: h.w.credit, isWhiteHit: true, shot: h.w.shot });
+      boomGroup(state, target, Math.max(PhysicsConfig.BOOM_SPEED * WHITE_HIT_IMPACT, h.impact), { credit: h.w.credit, isWhiteHit: true, shot: h.w.shot });
     }
     h.w.special = null;
     h.w.ghost = true;
@@ -555,8 +583,8 @@ export function stepPhysics(state: CollisionState, dt: number, now: number, widt
       const k = (PhysicsConfig.SPEED_CAP * PhysicsConfig.SC) / sp;
       g.vx *= k; g.vy *= k;
     }
-    if (Math.abs(g.av) < 0.02) g.av = 0;
-    else if (Math.abs(g.av) > 12) g.av = Math.sign(g.av) * 12;
+    if (Math.abs(g.av) < SPIN_STOP) g.av = 0;
+    else if (Math.abs(g.av) > SPIN_CAP) g.av = Math.sign(g.av) * SPIN_CAP;
 
     // A ball at rest stops carrying credit: whatever sets it moving again is
     // not the throw that last touched it.
@@ -580,7 +608,7 @@ export function stepPhysics(state: CollisionState, dt: number, now: number, widt
     mouthCollide(g, state.players, width, height);
   }
   collide(state, now);
-  relax(state, 24, width, height);
+  relax(state, RELAX_ITERATIONS, width, height);
   for (const b of state.balls) {
     if (b.rainTime && b.rainTime > 0) {
       b.rainTime = Math.max(0, b.rainTime - dt);
