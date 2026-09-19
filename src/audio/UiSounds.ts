@@ -78,12 +78,9 @@ export function resetUiSoundsForTesting() {
   clickLockMs = MENU_CLICK_LOCK_MS;
 }
 
-/** Start the audio graph, resuming a context the browser suspended. */
+/** Start the audio graph, resuming a context the browser stopped. */
 export function initMenuAudio() {
   initAudio();
-  if (AudioStore.actx && AudioStore.actx.state === 'suspended') {
-    AudioStore.actx.resume();
-  }
 }
 
 function getAudioCtx(): AudioContext | null {

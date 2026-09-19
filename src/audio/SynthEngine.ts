@@ -205,9 +205,31 @@ export function fadeDroneForOptions(duck: boolean) {
 
 // --- Lifecycle ---
 
+/**
+ * Whether the browser has stopped the context and a `resume()` could restart it.
+ *
+ * `'interrupted'` is not in every lib's `AudioContextState` yet, hence the string
+ * compare. WebKit uses it when a call or another app takes the audio, and a check
+ * for `'suspended'` alone leaves such a context silent for good.
+ */
+function isStopped(actx: AudioContext): boolean {
+  const state: string = actx.state;
+  return state === 'suspended' || state === 'interrupted';
+}
+
+/**
+ * Start the audio graph, or restart a context the browser stopped.
+ *
+ * This is the one place anything resumes the context. Once the resume lands, the
+ * output level is set again, which is the half of the sound toggle's recovery
+ * that a bare `resume()` leaves out.
+ */
 export function initAudio() {
-  if (AudioStore.actx) {
-    if (AudioStore.actx.state === 'suspended') AudioStore.actx.resume();
+  const existing = AudioStore.actx;
+  if (existing) {
+    if (isStopped(existing)) {
+      Promise.resolve(existing.resume()).then(applyGain, () => {});
+    }
     return;
   }
   const AC = window.AudioContext || (window as any).webkitAudioContext;
@@ -313,6 +335,22 @@ export function startDrone() {
     o.start();
     return o;
   });
+}
+
+/**
+ * Bring the sound back after the page has been out of view.
+ *
+ * A player who came back to a silent game could restore it by switching sound
+ * off and on, and this does what that toggle does — resume the context, then set
+ * the output level again — without their having to find it. A browser may refuse
+ * the resume until the player touches the page, so `main.ts` calls this both when
+ * the page is shown and again on the first gesture afterwards. It does nothing
+ * until audio has started, so it cannot create a context outside a gesture.
+ */
+export function wakeAudio() {
+  if (!AudioStore.actx) return;
+  initAudio();
+  applyGain();
 }
 
 export function applyGain() {

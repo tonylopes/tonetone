@@ -11,7 +11,7 @@ import { resetStartCountdown, updateCountdown } from './ui/Countdown';
 import { updateResultsEffects } from './ui/ResultsCelebration';
 import { setPaused, setupMatchControls } from './ui/MatchControls';
 import { settingsLine } from './game/Settings';
-import { initAudio, AudioStore, applyGain, fadeDroneForResults, fadeDroneForOptions, setOptionsOpenState } from './audio/SynthEngine';
+import { initAudio, wakeAudio, AudioStore, applyGain, fadeDroneForResults, fadeDroneForOptions, setOptionsOpenState } from './audio/SynthEngine';
 import { uiClick } from './audio/UiSounds';
 import { initMenuScreen, showMenu, isMenuOccluding, slideOutRight, slideInFromRight } from './ui/menu/MenuScreen';
 
@@ -49,10 +49,30 @@ function recoverGraphics() {
 for (const c of [cv, renderCtx.resCv, renderCtx.bg]) {
   c?.addEventListener('contextrestored', recoverGraphics);
 }
+/**
+ * Coming back to the page can also leave the sound stopped: the browser suspends
+ * or interrupts the audio while the page is out of view, and may refuse to resume
+ * it without a gesture. So wake it when the page is shown, and again on the first
+ * gesture after that until the context reports it is running. Capture phase, so a
+ * tap on the paused field or the menu counts as much as one on the game.
+ */
+let audioNeedsWake = false;
+function onPageShown() {
+  recoverGraphics();
+  wakeAudio();
+  audioNeedsWake = true;
+}
+function wakeAudioOnGesture() {
+  if (!audioNeedsWake) return;
+  wakeAudio();
+  if (!AudioStore.actx || AudioStore.actx.state === 'running') audioNeedsWake = false;
+}
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) recoverGraphics();
+  if (!document.hidden) onPageShown();
 });
-window.addEventListener('pageshow', recoverGraphics);
+window.addEventListener('pageshow', onPageShown);
+document.addEventListener('pointerup', wakeAudioOnGesture, true);
+document.addEventListener('keydown', wakeAudioOnGesture, true);
 
 const strip1 = createStrip(
   game.players[0],
