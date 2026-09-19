@@ -4,7 +4,6 @@ import {
   bayInset,
   launchPointOf,
   aimDirOf,
-  aimSpan,
   aimMaxReach,
   aimReachOf,
   aimAt,
@@ -59,11 +58,7 @@ describe('LauncherBays module', () => {
     });
   });
 
-  describe('aimSpan, aimMaxReach & aimReachOf', () => {
-    it('uses one aim span in every mode', () => {
-      expect(aimSpan(600)).toBe(600 * 0.40);
-    });
-
+  describe('aimMaxReach & aimReachOf', () => {
     it('calculates aimMaxReach to stay within the player playing area boundary', () => {
       // Wide enough that the height is the tighter of the two bounds.
       expect(aimMaxReach(2000, 600, true)).toBe(600 / 2 - bayInset()); // 300 - 38 = 262
@@ -142,19 +137,38 @@ describe('LauncherBays module', () => {
     it('sets aimDeg and strength toward target coordinate', () => {
       const p = makeLauncher(1); // side > 0, bottom launcher at (400, 500)
       const width = 800, height = 538; // bay inset is 38, so launchPoint = (400, 500)
-      aimAt(p, 400, 300, width, height);
+      aimAt(p, 400, 300, width, height, false);
 
       // Aiming straight up -> dx = 0, dy = -200 -> raw = atan2(0, 200) = 0
       expect(p.aimDeg).toBe(0);
       expect(p.strength).toBeGreaterThan(0);
     });
 
+    it('reaches full strength at the edge of the round envelope, in every direction', () => {
+      // A drag is scaled by the same bound the arrow is drawn to, so full power
+      // sits at the edge of the player's area whichever way they drag.
+      for (const [W, H] of [[412, 915], [1024, 768]]) {
+        for (const twoPlayer of [false, true]) {
+          const reach = aimMaxReach(W, H, twoPlayer);
+          const p = makeLauncher(1);
+          const m = launchPointOf(p, W, H);
+          for (let deg = -90; deg <= 90; deg += 15) {
+            const a = (deg * Math.PI) / 180;
+            aimAt(p, m.x + Math.sin(a) * reach, m.y - Math.cos(a) * reach, W, H, twoPlayer);
+            expect(p.strength).toBeCloseTo(1, 10);
+            aimAt(p, m.x + Math.sin(a) * reach / 2, m.y - Math.cos(a) * reach / 2, W, H, twoPlayer);
+            expect(p.strength).toBeCloseTo(0.5, 10);
+          }
+        }
+      }
+    });
+
     it('clamps aimDeg between -90 and +90', () => {
       const p = makeLauncher(1);
-      aimAt(p, 10000, 500, 800, 600);
+      aimAt(p, 10000, 500, 800, 600, false);
       expect(p.aimDeg).toBeLessThanOrEqual(90);
 
-      aimAt(p, -10000, 500, 800, 600);
+      aimAt(p, -10000, 500, 800, 600, false);
       expect(p.aimDeg).toBeGreaterThanOrEqual(-90);
     });
   });

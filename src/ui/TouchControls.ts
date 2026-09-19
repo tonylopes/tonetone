@@ -19,7 +19,7 @@ export function setupTouchControls(
 
   function pointAt(e: PointerEvent, p: LauncherPlayer, height: number, width: number) {
     const r = canvas.getBoundingClientRect();
-    aimAt(p, e.clientX - r.left, e.clientY - r.top, width, height);
+    aimAt(p, e.clientX - r.left, e.clientY - r.top, width, height, getGame().twoPlayer);
     syncStrips();
   }
 

@@ -124,7 +124,7 @@ export function advanceFrame(
   for (const p of game.players) if (p.reload > 0) p.reload = Math.max(0, p.reload - dt);
 
   if (game.aiOn && !game.matchOver) {
-    aiAim(game.players[1], game.groups, game.balls, width, height);
+    aiAim(game.players[1], game.groups, game.balls, width, height, game.twoPlayer);
   }
 
   let fired = 0;

@@ -421,10 +421,11 @@ describe('Bug Detection Test Suite', () => {
     });
   });
 
-  describe('Solo aiming', () => {
-    // Solo used to scale a drag by twice the two-player span, so the same
-    // gesture threw half as hard as it did against the AI, and a drag towards
-    // the bottom corners could not get past 0.28 strength on a tall phone.
+  describe('Aiming from the bottom corners', () => {
+    // A drag used to be scaled by the height, which a drag only reaches going
+    // forward. Sideways there is half the width to drag in, so on a tall phone a
+    // touch at a bottom corner threw at 0.56 strength at best, and at 0.28 in
+    // solo, which also scaled by twice the height the other modes did.
     function strengthFromDrag(twoPlayer: boolean, aiOn: boolean, x: number, y: number) {
       const W = 412, H = 915;
       const handlers: Record<string, (e: any) => void> = {};
@@ -453,8 +454,11 @@ describe('Bug Detection Test Suite', () => {
       }
     });
 
-    it('lets a drag towards a bottom corner build real power in solo', () => {
-      expect(strengthFromDrag(false, false, 0, 880)).toBeGreaterThan(0.5);
+    it('throws at full strength from either bottom corner, in every mode', () => {
+      for (const [twoPlayer, aiOn] of [[false, false], [true, true], [true, false]]) {
+        expect(strengthFromDrag(twoPlayer, aiOn, 0, 900)).toBe(1);
+        expect(strengthFromDrag(twoPlayer, aiOn, 412, 900)).toBe(1);
+      }
     });
   });
 });

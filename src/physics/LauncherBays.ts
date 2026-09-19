@@ -23,26 +23,19 @@ export function aimDirOf(p: LauncherPlayer): number {
 }
 
 /**
- * How far a drag must reach from the bay for a full-strength throw.
- *
- * It is the same in every mode. Solo used to take twice the two-player span, on
- * the grounds that one player has the whole height to drag in, but a drag can
- * only go half the width sideways: on a 412×915 phone a sideways drag topped out
- * at 0.28 strength in solo against 0.56 in a duel, so aiming from the bottom
- * corners barely threw at all and the same gesture threw half as hard as it did
- * against the AI.
- */
-export function aimSpan(height: number): number {
-  return height * 0.40;
-}
-
-/**
- * The furthest the aim arrow may reach, in any direction it can point.
+ * The furthest the aim may reach, in any direction it can point: both how long
+ * the arrow can be drawn and how far a drag goes for a full-strength throw.
  *
  * Both bays sit on the vertical centre line and sweep a half-disc of 180°, so
  * the envelope is round and the tighter of the two dimensions bounds it. A bound
  * taken from the height alone let a sideways aim run off the left or right edge
  * on any portrait screen, where `width / 2` is much the smaller of the two.
+ *
+ * The drag used to be scaled by the height instead (0.40 of it, 0.80 in solo),
+ * which a drag can only reach going forward. Sideways there is only half the
+ * width to drag in, so a touch at a bottom corner of a 412×915 phone threw at
+ * 0.56 strength at best, and 0.28 in solo. On the round envelope a drag to the
+ * edge of the player's area is full strength in every direction.
  */
 export function aimMaxReach(width: number, height: number, twoPlayer: boolean): number {
   const forward = twoPlayer ? height / 2 - bayInset() : height - bayInset();
@@ -54,7 +47,7 @@ export function aimMaxReach(width: number, height: number, twoPlayer: boolean): 
  * How long to draw the aim arrow, growing with strength and topping out at the
  * round limit above.
  *
- * The length is scaled to that limit rather than to `aimSpan`, so the arrow
+ * The length is scaled to that limit rather than to the height, so the arrow
  * saturates two thirds of the way up the strength range whatever the screen
  * shape. Scaling it to the height instead left the arrow at full length from a
  * sixth of the range upward on a tall phone, once the width bounded the limit,
@@ -66,12 +59,12 @@ export function aimReachOf(p: LauncherPlayer, width: number, height: number, two
   return Math.min(maxReach, Math.max(38, reach));
 }
 
-export function aimAt(p: LauncherPlayer, x: number, y: number, width: number, height: number) {
+export function aimAt(p: LauncherPlayer, x: number, y: number, width: number, height: number, twoPlayer: boolean) {
   const m = launchPointOf(p, width, height);
   const dx = x - m.x, dy = y - m.y;
   const raw = p.side > 0 ? Math.atan2(dx, -dy) : Math.atan2(-dx, dy);
   p.aimDeg = Math.max(-90, Math.min(90, (raw * 180) / Math.PI));
-  p.strength = Math.max(0, Math.min(1, Math.hypot(dx, dy) / aimSpan(height)));
+  p.strength = Math.max(0, Math.min(1, Math.hypot(dx, dy) / aimMaxReach(width, height, twoPlayer)));
 }
 
 // `_twoPlayer` is deliberately ignored: throw power is mode-independent so that a
