@@ -1,6 +1,7 @@
 import { Ball, Group, Offset } from './Types';
 import { PhysicsConfig } from './Config';
-import { BLACK, colorOfKind } from '../game/Rules';
+import { colorOfKind } from '../game/Rules';
+import { BLACK_HEX } from '../graphics/Palette';
 
 export function makeGroup(members: Ball[], vx: number, vy: number): Group {
   let cx = 0, cy = 0;
@@ -96,7 +97,7 @@ export function rebuildGroups(balls: Ball[], byId: Map<number, Ball>): Group[] {
 
     if (members.length > 1) {
       const plain = members.find(m => !m.special);
-      g.color = plain ? colorOfKind(plain.kind) : BLACK;
+      g.color = plain ? colorOfKind(plain.kind) : BLACK_HEX;
     }
 
     for (const m of members) m.group = g;

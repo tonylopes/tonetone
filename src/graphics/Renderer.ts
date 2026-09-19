@@ -2,14 +2,21 @@ import { Game, getRainBallAlpha } from '../game/GameState';
 import { PhysicsConfig, recalcThresholds } from '../physics/Config';
 import { uiFont } from './Fonts';
 import { ballSprite, inkOn, SP_R, SPRITE } from './Sprites';
-import { BG_SCALE, FLASH_SPECS, drawLiquid } from './VisualFX';
+import { BG_SCALE, FIELD_RING, FLASH_SPECS, RESULTS_RING, drawLiquid, drawRippleRing } from './VisualFX';
+import { BLACK_HEX, CYAN, FIELD_BG, LAUNCHER_CYAN, MENU_CYAN, PINK, Rgb, WHITE, WHITE_HEX, hex, rgba } from './Palette';
 import { FLASH_LIFE, POP_LIFE } from '../physics/Types';
 import { setHidden } from '../ui/Dom';
 import { aimDirOf, aimReachOf, launchPointOf, mouthRadius, throwSpeedOf } from '../physics/LauncherBays';
 import { LauncherPlayer } from '../physics/Types';
 import { kindLabel } from '../game/Rules';
+import { TAU } from '../math';
 
-export const P_COLOR = ['#4ff0ff', '#ff1ad9'];
+/** The player colours, indexed by player. */
+export const P_RGB: Rgb[] = [CYAN, PINK];
+export const P_COLOR: string[] = P_RGB.map(hex);
+
+/** Ball labels are unreadable below this radius, so they are not drawn. */
+export const MIN_LABEL_RADIUS = 11;
 
 /** Clearance a score pop keeps from the left and right edges of the canvas. */
 export const POP_EDGE_PAD = 6;
@@ -88,7 +95,7 @@ export function drawGame(rc: RenderContext, game: Game, time: number) {
   const { ctx, W, H } = rc;
   if (game.matchOver) {
     rc.bgx.globalCompositeOperation = 'source-over';
-    rc.bgx.fillStyle = '#140a2b';
+    rc.bgx.fillStyle = hex(FIELD_BG);
     rc.bgx.fillRect(0, 0, rc.bgW, rc.bgH);
   } else {
     drawLiquid(rc.bgx, rc.bgW, rc.bgH, game.balls, game.flashes, time);
@@ -125,7 +132,7 @@ export function drawGame(rc: RenderContext, game: Game, time: number) {
       }
       ctx.stroke();
       ctx.globalAlpha = 0.95; ctx.lineWidth = Math.max(1.5, R * 0.16);
-      ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.stroke();
+      ctx.strokeStyle = rgba(WHITE, 0.9); ctx.stroke();
     }
   }
   ctx.globalAlpha = 1;
@@ -133,24 +140,7 @@ export function drawGame(rc: RenderContext, game: Game, time: number) {
   // Draw ripple rings
   for (const f of game.flashes) {
     const spec = FLASH_SPECS[f.kind] || FLASH_SPECS.spawn;
-    const p = f.t / FLASH_LIFE;
-    const fade = (1 - p) * (1 - p);
-    const rad = R * (spec.r0 + p * spec.r1);
-    if (rad <= 0) continue;
-    const amp = R * spec.amp * fade;
-    const seed = f.x * 0.7 + f.y * 0.31;
-    ctx.beginPath();
-    const N = 44;
-    for (let i = 0; i <= N; i++) {
-      const a = (i / N) * 6.2832;
-      const rr = rad + Math.sin(a * spec.waves + seed + p * 7) * amp;
-      const px = f.x + Math.cos(a) * rr, py = f.y + Math.sin(a) * rr;
-      if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
-    }
-    ctx.closePath();
-    ctx.lineWidth = spec.w * (1 - p) + 0.6;
-    ctx.strokeStyle = 'rgba(' + spec.rgb + ',' + (0.9 * fade).toFixed(3) + ')';
-    ctx.stroke();
+    drawRippleRing(ctx, spec, f.x, f.y, R, f.t / FLASH_LIFE, FIELD_RING);
   }
   ctx.globalCompositeOperation = 'source-over';
 
@@ -161,8 +151,8 @@ export function drawGame(rc: RenderContext, game: Game, time: number) {
       ctx.globalAlpha = 0.34 * Math.min(1, (PhysicsConfig.GHOST_LIFE - (b.age || 0)) / 1.5);
       ctx.drawImage(ballSprite(b.color, false), b.x - d / 2, b.y - d / 2, d, d);
       ctx.globalAlpha = 1;
-      ctx.beginPath(); ctx.arc(b.x, b.y, R * 0.94, 0, 6.2832);
-      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(b.x, b.y, R * 0.94, 0, TAU);
+      ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(WHITE, 0.5); ctx.stroke();
       continue;
     }
     const grouped = b.group && b.group.members && b.group.members.length > 1;
@@ -172,7 +162,7 @@ export function drawGame(rc: RenderContext, game: Game, time: number) {
     ctx.globalAlpha = 1;
   }
 
-  if (game.showLabels && R >= 11) {
+  if (game.showLabels && R >= MIN_LABEL_RADIUS) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = uiFont(600, Math.round(R * 0.66));
@@ -190,7 +180,7 @@ export function drawGame(rc: RenderContext, game: Game, time: number) {
     ctx.save();
     ctx.setLineDash([11, 9]);
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = 'rgba(255,255,255,.3)';
+    ctx.strokeStyle = rgba(WHITE, 0.3);
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.restore();
   }
@@ -222,8 +212,8 @@ export function drawPops(rc: RenderContext, game: Game) {
     ctx.translate(popCenterX(f.x, ctx.measureText(f.text).width, W), f.y);
     if (game.twoPlayer && f.who === 1) ctx.rotate(Math.PI);
     ctx.globalAlpha = Math.max(0, 1 - k * k);
-    ctx.fillStyle = P_COLOR[f.who] || '#ffffff';
-    ctx.shadowColor = '#000000';
+    ctx.fillStyle = P_COLOR[f.who] || WHITE_HEX;
+    ctx.shadowColor = BLACK_HEX;
     ctx.shadowBlur = 10;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
@@ -238,167 +228,245 @@ export function drawLaunchers(rc: RenderContext, game: Game, time: number) {
   for (const p of activePlayers) drawOneLauncher(rc, game, p, time);
 }
 
+/**
+ * Everything one launcher is painted with.
+ *
+ * Player 1's mouth ring, reload arc, ready pulse and bead are `LAUNCHER_CYAN`
+ * while the same player's inner ring and aim arrow are `CYAN` — two cyans for
+ * one player. The table is where that now shows, rather than being spread over
+ * six ternaries; player 2 uses `PINK` for all of it.
+ */
+interface LauncherPaint {
+  /** Mouth ring, reload arc, ready pulse, bead. */
+  ring: Rgb;
+  /** Inner ring and aim arrow — the player's colour everywhere else. */
+  body: Rgb;
+  /** The soft wash under the reload arc. */
+  glow: Rgb;
+  /** The bead's pale core. */
+  bead: Rgb;
+}
+
+const LAUNCHER_PAINT: LauncherPaint[] = [
+  { ring: LAUNCHER_CYAN, body: CYAN, glow: [0, 200, 255], bead: [0xb3, 0xf7, 0xff] },
+  { ring: PINK, body: PINK, glow: PINK, bead: [0xff, 0xd9, 0xf7] },
+];
+
+/** The dark disc the mouth is sunk into. */
+const MOUTH_FILL: Rgb = [12, 4, 30];
+
+/** Dash pattern of the aim arrow's shaft. */
+const AIM_DASH = [6, 8];
+
 export function drawOneLauncher(rc: RenderContext, game: Game, p: LauncherPlayer, time: number) {
   const { ctx, W, H } = rc;
   const R = PhysicsConfig.R;
-  const dir = aimDirOf(p);
   const m = launchPointOf(p, W, H);
-  const boom = throwSpeedOf(p, game.twoPlayer) >= PhysicsConfig.BOOM_SPEED;
   const ready = p.reload <= 0;
-
-  const pIdx = game.players.indexOf(p) === 1 ? 1 : 0;
-  const isP1 = pIdx === 0;
-  const strokeBase = isP1 ? 'rgba(79,240,255,.4)' : 'rgba(255,26,217,.4)';
-  const strokeReload = isP1 ? 'rgba(0,229,255,1.0)' : 'rgba(255,26,217,1.0)';
-  const strokeInner = isP1 ? 'rgba(79,240,255,.65)' : 'rgba(255,26,217,.65)';
-  const playerColorHex = isP1 ? '#00e5ff' : '#ff1ad9';
-  const playerGlowColor = isP1 ? 'rgba(0, 200, 255, 0.4)' : 'rgba(255, 26, 217, 0.4)';
-
+  const paint = LAUNCHER_PAINT[game.players.indexOf(p) === 1 ? 1 : 0];
   const mouthR = mouthRadius() + R - 2;
 
+  drawMouth(ctx, m, mouthR, paint);
+  if (game.reloadTime > 0 && p.reload > 0) {
+    drawReloadArc(ctx, m, mouthR, 1 - p.reload / game.reloadTime, paint);
+  } else if (ready) {
+    drawReadyPulse(ctx, m, mouthR, time, paint);
+  }
+
+  ctx.beginPath();
+  ctx.arc(m.x, m.y, R * 1.25, 0, TAU);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = rgba(paint.body, 0.65);
+  ctx.stroke();
+  ctx.globalCompositeOperation = 'source-over';
+
+  drawLoadedBall(ctx, game, p, m, R, ready, time);
+  drawAim(ctx, game, p, m, R, W, H, ready, paint);
+}
+
+/** The dark disc and the ring around it. */
+function drawMouth(
+  ctx: CanvasRenderingContext2D,
+  m: { x: number; y: number },
+  mouthR: number,
+  paint: LauncherPaint
+) {
   ctx.globalCompositeOperation = 'source-over';
   ctx.beginPath();
-  ctx.arc(m.x, m.y, mouthR, 0, 6.2832);
-  ctx.fillStyle = 'rgba(12,4,30,.42)';
+  ctx.arc(m.x, m.y, mouthR, 0, TAU);
+  ctx.fillStyle = rgba(MOUTH_FILL, 0.42);
   ctx.fill();
 
   ctx.globalCompositeOperation = 'lighter';
   ctx.beginPath();
-  ctx.arc(m.x, m.y, mouthR, 0, 6.2832);
+  ctx.arc(m.x, m.y, mouthR, 0, TAU);
   ctx.lineWidth = 1.5;
-  ctx.strokeStyle = strokeBase;
+  ctx.strokeStyle = rgba(paint.body, 0.4);
   ctx.stroke();
+}
 
-  if (game.reloadTime > 0 && p.reload > 0) {
-    const done = Math.max(0, Math.min(1, 1 - p.reload / game.reloadTime));
-    const startAngle = -Math.PI / 2;
-    const endAngle = startAngle + done * 6.2832;
+/** The arc that fills as the launcher reloads, with a bead at its leading end. */
+function drawReloadArc(
+  ctx: CanvasRenderingContext2D,
+  m: { x: number; y: number },
+  mouthR: number,
+  progress: number,
+  paint: LauncherPaint
+) {
+  const done = Math.max(0, Math.min(1, progress));
+  const startAngle = -Math.PI / 2;
+  const endAngle = startAngle + done * TAU;
 
-    // 1. Soft player team color outer glow
-    ctx.beginPath();
-    ctx.arc(m.x, m.y, mouthR, startAngle, endAngle);
-    ctx.lineWidth = 4.5;
-    ctx.strokeStyle = playerGlowColor;
-    ctx.stroke();
-
-    // 2. Main vibrant player team color arc stroke (Cyan for P1, Pink for P2)
-    ctx.beginPath();
-    ctx.arc(m.x, m.y, mouthR, startAngle, endAngle);
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = strokeReload;
-    ctx.stroke();
-
-    // 3. Sleek leading tip bead (matching team color + highlight)
-    const tipX = m.x + Math.cos(endAngle) * mouthR;
-    const tipY = m.y + Math.sin(endAngle) * mouthR;
-
-    ctx.beginPath();
-    ctx.arc(tipX, tipY, 3.5, 0, 6.2832);
-    ctx.fillStyle = playerColorHex;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(tipX, tipY, 1.8, 0, 6.2832);
-    ctx.fillStyle = isP1 ? '#b3f7ff' : '#ffd9f7';
-    ctx.fill();
-  } else if (ready) {
-    const readyGlowAlpha = 0.25 + 0.15 * Math.sin(time * 4);
-    ctx.beginPath();
-    ctx.arc(m.x, m.y, mouthR, 0, 6.2832);
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = isP1
-      ? 'rgba(0, 229, 255, ' + readyGlowAlpha.toFixed(2) + ')'
-      : 'rgba(255, 26, 217, ' + readyGlowAlpha.toFixed(2) + ')';
-    ctx.stroke();
-  }
+  // A soft wash of the team colour under the arc, then the arc itself over it.
+  ctx.beginPath();
+  ctx.arc(m.x, m.y, mouthR, startAngle, endAngle);
+  ctx.lineWidth = 4.5;
+  ctx.strokeStyle = rgba(paint.glow, 0.4);
+  ctx.stroke();
 
   ctx.beginPath();
-  ctx.arc(m.x, m.y, R * 1.25, 0, 6.2832);
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = strokeInner;
+  ctx.arc(m.x, m.y, mouthR, startAngle, endAngle);
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = rgba(paint.ring, 1);
   ctx.stroke();
-  ctx.globalCompositeOperation = 'source-over';
 
-  if (p.loaded) {
-    const bob = ready ? 1 + 0.04 * Math.sin(time * 2.6) : 1;
-    const d = 2 * R * (SPRITE / (2 * SP_R)) * bob;
-    ctx.drawImage(ballSprite(p.loaded.color, false), m.x - d / 2, m.y - d / 2, d, d);
-    if (game.showLabels && R >= 11) {
-      ctx.save();
-      ctx.translate(m.x, m.y);
-      if (p.side < 0) ctx.rotate(Math.PI);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = uiFont(600, Math.round(R * 0.66));
-      ctx.fillStyle = inkOn(p.loaded.color);
-      ctx.fillText(kindLabel(p.loaded.kind), 0, 0.5);
-      ctx.restore();
-    }
+  // The bead riding the leading end, with a paler core inside it.
+  const tipX = m.x + Math.cos(endAngle) * mouthR;
+  const tipY = m.y + Math.sin(endAngle) * mouthR;
+  ctx.beginPath();
+  ctx.arc(tipX, tipY, 3.5, 0, TAU);
+  ctx.fillStyle = hex(paint.ring);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(tipX, tipY, 1.8, 0, TAU);
+  ctx.fillStyle = hex(paint.bead);
+  ctx.fill();
+}
+
+/** The slow breath a loaded, ready launcher gives off. */
+function drawReadyPulse(
+  ctx: CanvasRenderingContext2D,
+  m: { x: number; y: number },
+  mouthR: number,
+  time: number,
+  paint: LauncherPaint
+) {
+  const alpha = 0.25 + 0.15 * Math.sin(time * 4);
+  ctx.beginPath();
+  ctx.arc(m.x, m.y, mouthR, 0, TAU);
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = rgba(paint.ring, +alpha.toFixed(2));
+  ctx.stroke();
+}
+
+/** The ball sitting in the mouth, bobbing while it waits to be thrown. */
+function drawLoadedBall(
+  ctx: CanvasRenderingContext2D,
+  game: Game,
+  p: LauncherPlayer,
+  m: { x: number; y: number },
+  R: number,
+  ready: boolean,
+  time: number
+) {
+  if (!p.loaded) return;
+  const bob = ready ? 1 + 0.04 * Math.sin(time * 2.6) : 1;
+  const d = 2 * R * (SPRITE / (2 * SP_R)) * bob;
+  ctx.drawImage(ballSprite(p.loaded.color, false), m.x - d / 2, m.y - d / 2, d, d);
+  if (!game.showLabels || R < MIN_LABEL_RADIUS) return;
+  ctx.save();
+  ctx.translate(m.x, m.y);
+  if (p.side < 0) ctx.rotate(Math.PI);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = uiFont(600, Math.round(R * 0.66));
+  ctx.fillStyle = inkOn(p.loaded.color);
+  ctx.fillText(kindLabel(p.loaded.kind), 0, 0.5);
+  ctx.restore();
+}
+
+/** Where the aim arrow starts, ends, and how heavy it is drawn. */
+interface AimGeometry {
+  fromX: number;
+  fromY: number;
+  tipX: number;
+  tipY: number;
+  dir: number;
+  headLength: number;
+  headWidth: number;
+  lineWidth: number;
+}
+
+/**
+ * The dashed shaft and its two head strokes.
+ *
+ * Drawn twice: a white pass underneath that keeps the arrow legible over the
+ * magenta background, then the team-coloured pass over it. `widen` is what
+ * separates them — the white pass is 1.5px broader on both strokes so it reads
+ * as an outline rather than a second arrow.
+ */
+function strokeAim(ctx: CanvasRenderingContext2D, g: AimGeometry, color: string, widen: number) {
+  ctx.setLineDash(AIM_DASH);
+  ctx.beginPath();
+  ctx.moveTo(g.fromX, g.fromY);
+  ctx.lineTo(g.tipX, g.tipY);
+  ctx.lineWidth = g.lineWidth + widen;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  for (const side of [-0.5, 0.5]) {
+    ctx.moveTo(g.tipX, g.tipY);
+    ctx.lineTo(g.tipX - Math.cos(g.dir + side) * g.headLength, g.tipY - Math.sin(g.dir + side) * g.headLength);
   }
-  const fade = ready ? 1 : 0.35;
+  ctx.lineWidth = g.headWidth + widen;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+}
+
+/** The aim arrow: how the player is pointed, and how hard they are about to throw. */
+function drawAim(
+  ctx: CanvasRenderingContext2D,
+  game: Game,
+  p: LauncherPlayer,
+  m: { x: number; y: number },
+  R: number,
+  W: number,
+  H: number,
+  ready: boolean,
+  paint: LauncherPaint
+) {
+  const dir = aimDirOf(p);
   const reach = aimReachOf(p, W, H, game.twoPlayer);
-  const aimColor =
-    (boom
-      ? 'rgba(255,26,217,'
-      : isP1
-      ? 'rgba(79,240,255,'
-      : 'rgba(255,26,217,') +
-    ((0.65 + 0.35 * p.strength) * fade).toFixed(3) +
-    ')';
+  const fade = ready ? 1 : 0.35;
+  // The arrow turns pink for either player once the throw would boom on impact.
+  const boom = throwSpeedOf(p, game.twoPlayer) >= PhysicsConfig.BOOM_SPEED;
+  const aimColor = rgba(boom ? PINK : paint.body, +((0.65 + 0.35 * p.strength) * fade).toFixed(3));
 
-  const tx = m.x + Math.cos(dir) * reach, ty = m.y + Math.sin(dir) * reach;
-  const arrowHeadLength = 11 + p.strength * 18;
-  const arrowHeadWidth = 2.5 + p.strength * 3;
-  const mainLineWidth = 2 + p.strength * 3;
+  const g: AimGeometry = {
+    fromX: m.x + Math.cos(dir) * R * 1.1,
+    fromY: m.y + Math.sin(dir) * R * 1.1,
+    tipX: m.x + Math.cos(dir) * reach,
+    tipY: m.y + Math.sin(dir) * reach,
+    dir,
+    headLength: 11 + p.strength * 18,
+    headWidth: 2.5 + p.strength * 3,
+    lineWidth: 2 + p.strength * 3,
+  };
 
-  // 1. Translucent white glow pass for crisp, soft edge definition against magenta or dark surfaces
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
-  ctx.shadowColor = `rgba(255, 255, 255, ${(0.6 * fade).toFixed(3)})`;
+  ctx.shadowColor = rgba(WHITE, +(0.6 * fade).toFixed(3));
   ctx.shadowBlur = 10;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 0;
-
-  const whiteGlowColor = `rgba(255, 255, 255, ${(0.35 * fade).toFixed(3)})`;
-
-  ctx.setLineDash([6, 8]);
-  ctx.beginPath();
-  ctx.moveTo(m.x + Math.cos(dir) * R * 1.1, m.y + Math.sin(dir) * R * 1.1);
-  ctx.lineTo(tx, ty);
-  ctx.lineWidth = mainLineWidth + 1.5;
-  ctx.strokeStyle = whiteGlowColor;
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  ctx.beginPath();
-  for (const side of [-0.5, 0.5]) {
-    ctx.moveTo(tx, ty);
-    ctx.lineTo(tx - Math.cos(dir + side) * arrowHeadLength, ty - Math.sin(dir + side) * arrowHeadLength);
-  }
-  ctx.lineWidth = arrowHeadWidth + 1.5;
-  ctx.strokeStyle = whiteGlowColor;
-  ctx.stroke();
+  strokeAim(ctx, g, rgba(WHITE, +(0.35 * fade).toFixed(3)), 1.5);
   ctx.restore();
 
-  // 2. Main vibrant player aim color stroke
   ctx.globalCompositeOperation = 'lighter';
-  ctx.setLineDash([6, 8]);
-  ctx.beginPath();
-  ctx.moveTo(m.x + Math.cos(dir) * R * 1.1, m.y + Math.sin(dir) * R * 1.1);
-  ctx.lineTo(tx, ty);
-  ctx.lineWidth = mainLineWidth;
-  ctx.strokeStyle = aimColor;
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  ctx.beginPath();
-  for (const side of [-0.5, 0.5]) {
-    ctx.moveTo(tx, ty);
-    ctx.lineTo(tx - Math.cos(dir + side) * arrowHeadLength, ty - Math.sin(dir + side) * arrowHeadLength);
-  }
-  ctx.lineWidth = arrowHeadWidth;
-  ctx.strokeStyle = aimColor;
-  ctx.stroke();
+  strokeAim(ctx, g, aimColor, 0);
   ctx.globalCompositeOperation = 'source-over';
 }
 
@@ -420,24 +488,7 @@ export function drawResultsCanvas(rc: RenderContext, game: Game) {
   ctx.globalCompositeOperation = 'lighter';
   for (const f of game.flashes) {
     const spec = FLASH_SPECS[f.kind] || FLASH_SPECS.spawn;
-    const p = f.t / FLASH_LIFE;
-    const fade = (1 - p) * (1 - p);
-    const rad = R * (spec.r0 + p * spec.r1);
-    if (rad <= 0) continue;
-    const amp = R * spec.amp * fade;
-    const seed = f.x * 0.7 + f.y * 0.31;
-    ctx.beginPath();
-    const N = 44;
-    for (let i = 0; i <= N; i++) {
-      const a = (i / N) * 6.2832;
-      const rr = rad + Math.sin(a * spec.waves + seed + p * 7) * amp;
-      const px = f.x + Math.cos(a) * rr, py = f.y + Math.sin(a) * rr;
-      if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
-    }
-    ctx.closePath();
-    ctx.lineWidth = spec.w * (1 - p) + 0.8;
-    ctx.strokeStyle = 'rgba(' + spec.rgb + ',' + (0.95 * fade).toFixed(3) + ')';
-    ctx.stroke();
+    drawRippleRing(ctx, spec, f.x, f.y, R, f.t / FLASH_LIFE, RESULTS_RING);
   }
   ctx.restore();
 
@@ -456,13 +507,13 @@ export function drawResultsCanvas(rc: RenderContext, game: Game) {
       ctx.globalAlpha = alpha;
       const fontSize = (17 + 8 * (1 - k)).toFixed(1);
       ctx.font = uiFont(800, fontSize);
-      const color = P_COLOR[f.who] || '#00f7ff';
+      const color = P_COLOR[f.who] || hex(MENU_CYAN);
       ctx.shadowColor = color;
       ctx.shadowBlur = 14;
       ctx.fillStyle = color;
       ctx.fillText(f.text, 0, -k * 34);
 
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = WHITE_HEX;
       ctx.shadowBlur = 4;
       ctx.fillText(f.text, 0, -k * 34);
       ctx.restore();

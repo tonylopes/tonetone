@@ -32,7 +32,8 @@ export function inkOn(color: string): string {
   return t;
 }
 
-import { BLACK } from '../game/Rules';
+import { BLACK_HEX } from './Palette';
+import { TAU } from '../math';
 
 export const SPRITE = 128;
 export const SP_R = SPRITE / 2 - 8;
@@ -45,13 +46,13 @@ export function ballSprite(color: string, grouped: boolean): HTMLCanvasElement {
   c = document.createElement('canvas'); c.width = c.height = SPRITE;
   watchSprite(c);
   const x = c.getContext('2d')!;
-  x.beginPath(); x.arc(SPRITE / 2, SPRITE / 2, SP_R, 0, 6.2832);
+  x.beginPath(); x.arc(SPRITE / 2, SPRITE / 2, SP_R, 0, TAU);
   x.fillStyle = color; x.fill();
 
   // Only the black special ball takes the dark treatment. This used to also test
   // three colours that appear nowhere else in the code or the CSS, plus a second
   // spelling of BLACK, so it always reduced to this.
-  const isDark = color.toLowerCase() === BLACK.toLowerCase();
+  const isDark = color.toLowerCase() === BLACK_HEX;
 
   x.globalCompositeOperation = 'source-atop';
   const hi = x.createRadialGradient(SPRITE * 0.36, SPRITE * 0.31, 0, SPRITE * 0.36, SPRITE * 0.31, SP_R * 1.15);
@@ -73,7 +74,7 @@ export function ballSprite(color: string, grouped: boolean): HTMLCanvasElement {
   x.fillStyle = sh; x.fillRect(0, 0, SPRITE, SPRITE);
   x.globalCompositeOperation = 'source-over';
 
-  x.beginPath(); x.arc(SPRITE / 2, SPRITE / 2, SP_R, 0, 6.2832);
+  x.beginPath(); x.arc(SPRITE / 2, SPRITE / 2, SP_R, 0, TAU);
   x.lineWidth = grouped ? 8 : 3;
   x.strokeStyle = grouped ? 'rgba(255,255,255,.95)' : (isDark ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.32)');
   x.stroke();

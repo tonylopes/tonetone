@@ -3,6 +3,7 @@ import { PhysicsConfig } from './Config';
 import { rebuildGroups, separateGroups, shiftGroup, syncGroup } from './RigidBody';
 import { clearExempt, mouthClamp, mouthCollide } from './LauncherBays';
 import { NO_CREDIT, SHOT_DECAY, boomPay, boomTierWord, boomsOn, lockPay, peelPay } from '../game/Rules';
+import { TAU } from '../math';
 
 export interface CollisionState {
   balls: Ball[];
@@ -190,7 +191,7 @@ export function boomGroup(state: CollisionState, g: Group, impact: number, opts:
   state.sounds.push({ type: 'boom', x: ax / n, kind: voice.kind, size: n, whiteBlack });
 
   for (const b of destroyedMembers) {
-    const dir = Math.random() * Math.PI * 2;
+    const dir = Math.random() * TAU;
     let sp = Math.max(
       200 * PhysicsConfig.SC,
       impact * (PhysicsConfig.GHOST_SPREAD_LO + Math.random() * (PhysicsConfig.GHOST_SPREAD_HI - PhysicsConfig.GHOST_SPREAD_LO))
@@ -227,7 +228,7 @@ export function detach(state: CollisionState, b: Ball, impact?: number, opts: Pe
   const hit = impact || PhysicsConfig.KICKOUT_MIN;
   const lo = Math.max(90 * PhysicsConfig.SC, hit * 0.35);
   const hi = Math.max(lo + 30, Math.min(PhysicsConfig.KICKOUT_MAX, hit * 1.4));
-  const dir = Math.random() * Math.PI * 2;
+  const dir = Math.random() * TAU;
   const speed = (lo + Math.random() * (hi - lo)) * PhysicsConfig.KICK;
   b.group.vx = Math.cos(dir) * speed;
   b.group.vy = Math.sin(dir) * speed;
@@ -327,7 +328,7 @@ export function collide(state: CollisionState, now: number) {
 
     let nx: number, ny: number;
     if (d < 1e-6) {
-      const ang = Math.random() * 6.2832;
+      const ang = Math.random() * TAU;
       nx = Math.cos(ang); ny = Math.sin(ang);
     } else {
       nx = dx / d; ny = dy / d;
@@ -506,7 +507,7 @@ export function relax(state: CollisionState, iterations: number, width: number, 
       const d2 = dx * dx + dy * dy;
       if (d2 >= min * min) return;
       let d = Math.sqrt(d2), nx: number, ny: number;
-      if (d < 1e-6) { const ang = Math.random() * 6.2832; nx = Math.cos(ang); ny = Math.sin(ang); d = 0; }
+      if (d < 1e-6) { const ang = Math.random() * TAU; nx = Math.cos(ang); ny = Math.sin(ang); d = 0; }
       else { nx = dx / d; ny = dy / d; }
       const push = min - d;
       if (push <= SLOP) return;

@@ -12,6 +12,7 @@ import {
   loose, makeBall, maxDrift, pairwiseDistances, totalAngularMomentum,
   totalEnergy, totalMomentum, weld, withSandbox,
 } from './Scenarios';
+import { TAU } from '../math';
 
 export interface CheckResult {
   name: string;
@@ -125,7 +126,7 @@ export function checkConservation(): CheckResult[] {
         id++;
         sb.state.balls.push(b);
         sb.state.byId.set(b.id, b);
-        const ang = Math.random() * Math.PI * 2;
+        const ang = Math.random() * TAU;
         sb.state.groups.push(loose(b, Math.cos(ang) * 260, Math.sin(ang) * 260));
       }
     }
@@ -158,7 +159,7 @@ export function checkRigidity(): CheckResult[] {
   return withSandbox([], [], { width: 4000, height: 4000 }, sb => {
     const ring = [];
     for (let i = 0; i < 5; i++) {
-      const ang = (i / 5) * Math.PI * 2;
+      const ang = (i / 5) * TAU;
       ring.push(makeBall(1 + i, 2000 + Math.cos(ang) * 2 * R, 2000 + Math.sin(ang) * 2 * R, 10 + i));
     }
     for (const b of ring) { sb.state.balls.push(b); sb.state.byId.set(b.id, b); }

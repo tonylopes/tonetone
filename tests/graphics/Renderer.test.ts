@@ -185,8 +185,10 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
     expect(lowStrokes[0]).not.toBe(highStrokes[0]);
     expect(lowStrokes[1]).not.toBe(highStrokes[1]);
 
-    // Verify translucent white glow contrast pass was recorded in strokeStyles
-    expect(strokeStyles.some((s) => s.includes('255, 255, 255'))).toBe(true);
+    // Verify translucent white glow contrast pass was recorded in strokeStyles.
+    // The colour is built by the palette's `rgba` helper, so it is spelled
+    // without spaces; assert on the prefix rather than on one exact alpha.
+    expect(strokeStyles.some((s) => s.startsWith('rgba(255,255,255,'))).toBe(true);
   });
 });
 

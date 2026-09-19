@@ -13,7 +13,7 @@
  * scheduling look-ahead the voices already use.
  */
 import { SoundEvent } from '../physics/Types';
-import { BALL_COLORS } from '../game/Rules';
+import { BALL_COLORS } from '../graphics/Palette';
 import { playNote, playKnock, playMagneticElectricSound } from './Voices';
 
 /** The knock force that maps to full loudness. Harder hits are clamped to it. */

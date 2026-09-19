@@ -1,10 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  BALL_COLORS,
   COLORS,
   SPECIALS,
-  BLACK,
-  WHITE,
   setColorsCount,
   setSpecialsToggle,
   colorOfKind,
@@ -22,6 +19,7 @@ import {
   peelPay,
   setShotDecay,
 } from '../../src/game/Rules';
+import { BALL_COLORS, BLACK_HEX, WHITE_HEX } from '../../src/graphics/Palette';
 import { LauncherPlayer } from '../../src/physics/Types';
 
 describe('Rules module', () => {
@@ -173,7 +171,7 @@ describe('Rules module', () => {
         if (fromLeader.special === 'black') {
           blackProduced++;
           expect(fromLeader.kind).toBe(-1);
-          expect(fromLeader.color).toBe(BLACK);
+          expect(fromLeader.color).toBe(BLACK_HEX);
         }
 
         const fromTrailer = drawFor(trailer, players, true);
@@ -181,7 +179,7 @@ describe('Rules module', () => {
         if (fromTrailer.special === 'white') {
           whiteProduced++;
           expect(fromTrailer.kind).toBe(-1);
-          expect(fromTrailer.color).toBe(WHITE);
+          expect(fromTrailer.color).toBe(WHITE_HEX);
         }
       }
 
@@ -247,11 +245,11 @@ describe('Rules module', () => {
         if (ball.special === 'black') {
           blackProduced++;
           expect(ball.kind).toBe(-1);
-          expect(ball.color).toBe(BLACK);
+          expect(ball.color).toBe(BLACK_HEX);
         } else if (ball.special === 'white') {
           whiteProduced++;
           expect(ball.kind).toBe(-1);
-          expect(ball.color).toBe(WHITE);
+          expect(ball.color).toBe(WHITE_HEX);
         }
       }
 

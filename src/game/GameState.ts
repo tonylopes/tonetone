@@ -1,12 +1,14 @@
 import { Ball, Flash, Group, LauncherPlayer, Pop } from '../physics/Types';
 import { PhysicsConfig } from '../physics/Config';
-import { drawFor, randomKind, colorOfKind, BLACK, WHITE } from './Rules';
+import { drawFor, randomKind, colorOfKind } from './Rules';
+import { BLACK_HEX, WHITE_HEX } from '../graphics/Palette';
 import { rebuildGroups } from '../physics/RigidBody';
 import { aimDirOf, launchPointOf, throwSpeedOf } from '../physics/LauncherBays';
 import { playThud } from '../audio/Voices';
 import { panOf } from '../audio/SoundEvents';
 import { CollisionState } from '../physics/CollisionSolver';
 import { stopAllVoices } from '../audio/SynthEngine';
+import { TAU } from '../math';
 
 /**
  * How the seats are filled for a match.
@@ -284,13 +286,13 @@ export function spawn(
     bonds: new Set(),
     group: null as any,
   };
-  ball.color = ball.special ? (ball.special === 'black' ? BLACK : WHITE) : colorOfKind(ball.kind);
+  ball.color = ball.special ? (ball.special === 'black' ? BLACK_HEX : WHITE_HEX) : colorOfKind(ball.kind);
   if (aim) ball.exempt = 1.6;
 
   game.balls.push(ball);
   game.byId.set(ball.id, ball);
 
-  const dir = aim ? aim.dir : Math.random() * Math.PI * 2;
+  const dir = aim ? aim.dir : Math.random() * TAU;
   const speed = (aim ? aim.speed : (lo + Math.random() * (hi - lo)) * PhysicsConfig.SC) * PhysicsConfig.KICK;
   // Both rebuilds are load-bearing, however redundant the first one looks: the
   // new ball has no bonds, so it is always the singleton the fallback below

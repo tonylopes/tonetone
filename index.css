@@ -5,6 +5,12 @@
   --ink-soft: #ac91d0;
   --pink: #ff1ad9;
   --cyan: #4ff0ff;
+  /* The menu screen's own three brand shades, close to but not equal to
+     --cyan and --pink. src/graphics/Palette.ts holds the same values, and
+     tests/graphics/Palette.test.ts fails if the two copies disagree. */
+  --menu-cyan: #00f7ff;
+  --menu-pink: #ff00aa;
+  --menu-pink-deep: #ff007f;
   --rail: rgba(255, 255, 255, 0.18);
 
   /* ── Typography ──────────────────────────────────────────────────
@@ -130,7 +136,7 @@
   background:
     linear-gradient(135deg, rgba(0, 247, 255, 0.45), rgba(0, 180, 240, 0.55) 25%,
       rgba(190, 0, 140, 0.62) 70%, rgba(255, 0, 127, 0.52)) padding-box,
-    linear-gradient(90deg, #00f7ff, #ff007f) border-box;
+    linear-gradient(90deg, var(--menu-cyan), var(--menu-pink-deep)) border-box;
   color: #ffffff;
   box-shadow: 0 0 14px rgba(255, 0, 127, 0.85);
 }
@@ -588,7 +594,7 @@ input[type=range] {
   font-size: var(--fs-xl);
   font-weight: var(--fw-title);
   letter-spacing: var(--ls-title);
-  color: #00f7ff;
+  color: var(--menu-cyan);
   text-transform: uppercase;
   margin: 0 !important;
   border: none !important;
@@ -609,7 +615,7 @@ input[type=range] {
 }
 .panel-close-btn:hover {
   background: rgba(255, 0, 127, 0.35);
-  border-color: #ff007f;
+  border-color: var(--menu-pink-deep);
   box-shadow: 0 0 16px rgba(255, 0, 127, 0.6);
   transform: translateY(-1px);
 }
@@ -655,7 +661,7 @@ select {
 }
 select option {
   background: #22103f;
-  color: #f3e7ff;
+  color: var(--ink);
 }
 
 #copy {
@@ -715,12 +721,12 @@ select option {
 }
 .sound-badge.game-fx {
   background: rgba(0, 247, 255, 0.18);
-  color: #00f7ff;
+  color: var(--menu-cyan);
   border: 1px solid rgba(0, 247, 255, 0.35);
 }
 .sound-badge.boom-levels {
   background: rgba(255, 0, 127, 0.18);
-  color: #ff007f;
+  color: var(--menu-pink-deep);
   border: 1px solid rgba(255, 0, 127, 0.35);
 }
 .sound-badge.bw-levels {
@@ -767,7 +773,7 @@ select option {
 }
 .sound-play-btn:hover {
   background: linear-gradient(135deg, rgba(0, 247, 255, 0.4), rgba(255, 0, 127, 0.4));
-  border-color: #00f7ff;
+  border-color: var(--menu-cyan);
   box-shadow: 0 0 18px rgba(0, 247, 255, 0.5);
   transform: translateY(-1px);
 }
@@ -799,7 +805,7 @@ select option {
   font-weight: var(--fw-title);
   letter-spacing: -0.01em;
   line-height: 1;
-  color: #4ff0ff;
+  color: var(--cyan);
   text-shadow:
     0 0 12px rgba(79, 240, 255, 0.95),
     0 0 28px rgba(79, 240, 255, 0.55);
@@ -808,7 +814,7 @@ select option {
   text-align: center;
 }
 .bar-countdown.end {
-  color: #ff1ad9;
+  color: var(--pink);
   text-shadow:
     0 0 12px rgba(255, 26, 217, 0.95),
     0 0 28px rgba(255, 26, 217, 0.55);
@@ -874,7 +880,7 @@ select option {
 .pause-bar {
   width: 14px;
   height: 48px;
-  background: linear-gradient(180deg, #00f7ff, #ff1ad9);
+  background: linear-gradient(180deg, var(--menu-cyan), var(--pink));
   border-radius: 6px;
   box-shadow: 0 0 16px rgba(0, 247, 255, 0.85), 0 0 24px rgba(255, 26, 217, 0.65);
   animation: pause-bar-pulse 2s ease-in-out infinite alternate;
@@ -922,7 +928,7 @@ select option {
 
 .pause-btn.is-paused {
   background: rgba(255, 26, 217, 0.28);
-  border-color: #ff1ad9;
+  border-color: var(--pink);
   color: #ffffff;
   box-shadow: 0 0 16px rgba(255, 26, 217, 0.65);
 }
@@ -996,7 +1002,7 @@ select option {
 
 .confirm-btn.primary {
   background: rgba(255, 26, 217, 0.25);
-  border: 1px solid #ff1ad9;
+  border: 1px solid var(--pink);
   color: #ffffff;
   box-shadow: 0 0 14px rgba(255, 26, 217, 0.5);
 }

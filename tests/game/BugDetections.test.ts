@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { drawFor, BLACK, WHITE, setColorsCount, colorOfKind } from '../../src/game/Rules';
+import { drawFor, setColorsCount, colorOfKind } from '../../src/game/Rules';
+import { BLACK_HEX, WHITE_HEX } from '../../src/graphics/Palette';
 import { KNOB_IDS } from '../../src/game/Settings';
 import { KNOBS } from '../../src/sim/Knobs';
 import { PhysicsConfig, recalcThresholds } from '../../src/physics/Config';
@@ -28,13 +29,13 @@ describe('Bug Detection Test Suite', () => {
   });
 
   describe('Bug 2: Special ball color corruption during colors setting update', () => {
-    it('preserves special ball color (BLACK/WHITE) when updating color count', () => {
+    it('preserves special ball color (BLACK_HEX/WHITE_HEX) when updating color count', () => {
       const game = createGame();
       const blackBall: Ball = {
-        id: 1, x: 100, y: 100, kind: -1, special: 'black', color: BLACK, credit: 0, bonds: new Set(), group: null as any
+        id: 1, x: 100, y: 100, kind: -1, special: 'black', color: BLACK_HEX, credit: 0, bonds: new Set(), group: null as any
       };
       const whiteBall: Ball = {
-        id: 2, x: 200, y: 200, kind: -1, special: 'white', color: WHITE, credit: 0, bonds: new Set(), group: null as any
+        id: 2, x: 200, y: 200, kind: -1, special: 'white', color: WHITE_HEX, credit: 0, bonds: new Set(), group: null as any
       };
       game.balls.push(blackBall, whiteBall);
 
@@ -47,8 +48,8 @@ describe('Bug Detection Test Suite', () => {
         }
       }
 
-      expect(blackBall.color).toBe(BLACK);
-      expect(whiteBall.color).toBe(WHITE);
+      expect(blackBall.color).toBe(BLACK_HEX);
+      expect(whiteBall.color).toBe(WHITE_HEX);
       expect(blackBall.special).toBe('black');
       expect(whiteBall.special).toBe('white');
     });
@@ -198,14 +199,14 @@ describe('Bug Detection Test Suite', () => {
         const game: any = { showLabels: false };
         const strip = createStrip(p, { chipNow: 'a', chipNext: 'b' }, () => game);
 
-        p.nextUp = { kind: -1, special: 'black', color: BLACK };
+        p.nextUp = { kind: -1, special: 'black', color: BLACK_HEX };
         p.then = { kind: 1, special: null, color: colorOfKind(1) };
         strip.refresh();
         const afterBlack = painted.length;
         expect(afterBlack).toBeGreaterThan(0);
 
         // Same kinds in both slots, but the special itself changed.
-        p.nextUp = { kind: -1, special: 'white', color: WHITE };
+        p.nextUp = { kind: -1, special: 'white', color: WHITE_HEX };
         strip.refresh();
         expect(painted.length).toBeGreaterThan(afterBlack);
       } finally {

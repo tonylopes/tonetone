@@ -1,14 +1,6 @@
 import { BallOnDeck, Group, LauncherPlayer, SpecialBallType } from '../physics/Types';
 import { PhysicsConfig } from '../physics/Config';
-
-export const BALL_COLORS = [
-  '#FDBE4E', // Gold / Warm Yellow
-  '#9744EE', // Purple / Violet
-  '#5DD478', // Soft Green
-  '#4363D8', // Blue
-  '#911EB4', // Deep Purple
-  '#42D4F4', // Cyan
-];
+import { BALL_COLORS, BLACK_HEX, WHITE_HEX } from '../graphics/Palette';
 
 export const PALETTES: Record<number, number[]> = {
   3: [0, 1, 2],
@@ -18,8 +10,6 @@ export const PALETTES: Record<number, number[]> = {
 };
 
 export let COLORS = 3;
-export const BLACK = '#000000';
-export const WHITE = '#FFFFFF';
 export let SPECIALS = true;
 
 // Scoring pays for what a shot changed, not for the size of whatever it touched.
@@ -191,7 +181,7 @@ export function drawFor(p?: LauncherPlayer, playersList?: LauncherPlayer[], twoP
       const special: SpecialBallType = gap > 0
         ? (Math.floor(Math.random() * (COLORS + 2)) >= COLORS ? 'black' : null)
         : (Math.floor(Math.random() * (COLORS + 1)) === COLORS && Math.random() < 0.5 ? 'white' : null);
-      if (special) return { kind: -1, special, color: special === 'black' ? BLACK : WHITE };
+      if (special) return { kind: -1, special, color: special === 'black' ? BLACK_HEX : WHITE_HEX };
     }
   }
   const kind = randomKind();

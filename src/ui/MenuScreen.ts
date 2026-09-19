@@ -1,13 +1,15 @@
 import { AudioStore, BEAT, applyGain, initAudio as initGameAudio, isOptionsOpen } from '../audio/SynthEngine';
 import { playNote, playRandomGameBoom } from '../audio/Voices';
 import { Flash, Pop } from '../physics/Types';
-import { CURRENTS, FLASH_SPECS } from '../graphics/VisualFX';
+import { CURRENTS, FLASH_SPECS, MENU_RING, drawRippleRing, ringFade, ringRadius } from '../graphics/VisualFX';
 import { FLASH_LIFE, POP_LIFE } from '../physics/Types';
 import { PlayMode } from '../game/GameState';
 import { setHidden } from './Dom';
+import { TAU } from '../math';
 import { ballSprite, clearSpriteCache, glowSprite } from '../graphics/Sprites';
 import { uiFont, logoFont } from '../graphics/Fonts';
-import { colorOfKind, randomKind, BLACK, WHITE } from '../game/Rules';
+import { colorOfKind, randomKind } from '../game/Rules';
+import { BLACK_HEX, MENU_CYAN, MENU_PINK, MENU_PINK_DEEP, WHITE_HEX, hex, rgb, rgba } from '../graphics/Palette';
 import { P_COLOR } from '../graphics/Renderer';
 
 export interface MenuItem {
@@ -72,7 +74,7 @@ function initMotes() {
       speedY: -(Math.random() * 0.35 + 0.12),
       speedX: (Math.random() - 0.5) * 0.25,
       alpha: Math.random() * 0.65 + 0.25,
-      pulse: Math.random() * Math.PI * 2
+      pulse: Math.random() * TAU
     });
   }
 }
@@ -99,7 +101,7 @@ function initMenuBalls() {
   for (let i = 0; i < NUM_MENU_BALLS; i++) {
     const kind = randomKind();
     const isSpecial = Math.random() < 0.15;
-    const color = isSpecial ? (Math.random() < 0.5 ? BLACK : WHITE) : colorOfKind(kind);
+    const color = isSpecial ? (Math.random() < 0.5 ? BLACK_HEX : WHITE_HEX) : colorOfKind(kind);
     menuBalls.push({
       id: i + 1,
       x: pad + Math.random() * (width - pad * 2),
@@ -262,31 +264,17 @@ function updateAndDrawMenuFlashes() {
       continue;
     }
 
-    const fade = (1 - p) * (1 - p);
-    const rad = R * (spec.r0 + p * spec.r1);
+    const rad = ringRadius(spec, R, p);
     if (rad > 0) {
       // Glow background blob
       const bgRad = rad * 1.5;
-      c.globalAlpha = 0.5 * fade;
-      c.drawImage(glowSprite('rgb(' + spec.rgb + ')'), f.x - bgRad, f.y - bgRad, bgRad * 2, bgRad * 2);
+      c.globalAlpha = 0.5 * ringFade(p);
+      c.drawImage(glowSprite(rgb(spec.color)), f.x - bgRad, f.y - bgRad, bgRad * 2, bgRad * 2);
 
-      // Distorted multi-wave ripple rings
-      const amp = R * spec.amp * fade;
-      const seed = f.x * 0.7 + f.y * 0.31;
-      c.beginPath();
-      const N = 40;
-      for (let j = 0; j <= N; j++) {
-        const a = (j / N) * Math.PI * 2;
-        const rr = rad + Math.sin(a * spec.waves + seed + p * 7) * amp;
-        const px = f.x + Math.cos(a) * rr;
-        const py = f.y + Math.sin(a) * rr;
-        if (j === 0) c.moveTo(px, py);
-        else c.lineTo(px, py);
-      }
-      c.closePath();
-      c.lineWidth = spec.w * (1 - p) + 0.8;
-      c.strokeStyle = 'rgba(' + spec.rgb + ',' + (0.85 * fade).toFixed(3) + ')';
-      c.stroke();
+      // The ring is drawn under the blob's `globalAlpha`, not at full strength:
+      // that is how the menu's rings have always been dimmer than the field's,
+      // over and above their lower stroke alpha.
+      drawRippleRing(c, spec, f.x, f.y, R, p, MENU_RING);
     }
   }
 
@@ -360,14 +348,14 @@ function updateAndDrawMenuPops() {
 
     const fontSize = 17 + 8 * (1 - k);
     c.font = uiFont(800, fontSize.toFixed(1));
-    const color = P_COLOR[pop.who] || '#00f7ff';
+    const color = P_COLOR[pop.who] || hex(MENU_CYAN);
 
     c.shadowColor = color;
     c.shadowBlur = 12;
     c.fillStyle = color;
     c.fillText(pop.text, 0, -k * 30);
 
-    c.fillStyle = '#ffffff';
+    c.fillStyle = WHITE_HEX;
     c.shadowBlur = 4;
     c.fillText(pop.text, 0, -k * 30);
 
@@ -379,8 +367,8 @@ function updateAndDrawMenuPops() {
 
 const noteSymbols = ['♪', '♫', '♬', '♩', '𝄢'];
 const noteColors = [
-  { main: '#00f7ff', glow: 'rgba(0, 247, 255, 0.95)' },
-  { main: '#ff00aa', glow: 'rgba(255, 0, 170, 0.95)' },
+  { main: hex(MENU_CYAN), glow: rgba(MENU_CYAN, 0.95) },
+  { main: hex(MENU_PINK), glow: rgba(MENU_PINK, 0.95) },
   { main: '#00e5ff', glow: 'rgba(0, 229, 255, 0.90)' },
   { main: '#e879f9', glow: 'rgba(232, 121, 249, 0.90)' },
   { main: '#c084fc', glow: 'rgba(192, 132, 252, 0.90)' }
@@ -411,7 +399,7 @@ const MAX_NOTES = 7;
 function createSoundNote(centerX: number, centerY: number, boundsW: number, boundsH: number): SoundNote {
   const sym = noteSymbols[Math.floor(Math.random() * noteSymbols.length)];
   const colorObj = noteColors[Math.floor(Math.random() * noteColors.length)];
-  const spawnAngle = Math.random() * Math.PI * 2;
+  const spawnAngle = Math.random() * TAU;
   const spreadX = (boundsW * 0.52) * (0.4 + Math.random() * 0.65);
   const spreadY = (boundsH * 0.58) * (0.4 + Math.random() * 0.65);
 
@@ -431,7 +419,7 @@ function createSoundNote(centerX: number, centerY: number, boundsW: number, boun
     life: 0,
     maxLife: Math.floor(Math.random() * 140 + 110),
     pulseSpeed: Math.random() * 0.05 + 0.03,
-    pulseOffset: Math.random() * Math.PI * 2
+    pulseOffset: Math.random() * TAU
   };
 }
 
@@ -476,7 +464,7 @@ function updateAndDrawSoundNotes(centerX: number, centerY: number, boundsW: numb
     c.fillStyle = n.color;
     c.fillText(n.symbol, 0, 0);
 
-    c.fillStyle = '#ffffff';
+    c.fillStyle = WHITE_HEX;
     c.shadowBlur = 4;
     c.fillText(n.symbol, 0, 0);
 
@@ -1038,7 +1026,7 @@ function drawEtherealBackground(t: number) {
   c.restore();
 
   c.save();
-  c.fillStyle = '#ffffff';
+  c.fillStyle = WHITE_HEX;
   motes.forEach(m => {
     m.y += m.speedY;
     m.x += m.speedX + Math.sin(t * 0.01 + m.pulse) * 0.22;
@@ -1049,7 +1037,7 @@ function drawEtherealBackground(t: number) {
     const flicker = Math.sin(t * 0.03 + m.pulse) * 0.25 + 0.75;
     c.globalAlpha = m.alpha * flicker * 0.65;
     c.beginPath();
-    c.arc(m.x, m.y, m.radius, 0, Math.PI * 2);
+    c.arc(m.x, m.y, m.radius, 0, TAU);
     c.fill();
   });
   c.restore();
@@ -1063,7 +1051,7 @@ function drawSpeakerO(cx: number, cy: number, radius: number, t: number) {
   c.save();
 
   c.beginPath();
-  c.ellipse(cx, cy + radius * 0.94, radius * 0.85, radius * 0.26, 0, 0, Math.PI * 2);
+  c.ellipse(cx, cy + radius * 0.94, radius * 0.85, radius * 0.26, 0, 0, TAU);
   c.fillStyle = 'rgba(2, 1, 8, 0.9)';
   if (c.filter) c.filter = 'blur(5px)';
   c.fill();
@@ -1074,22 +1062,22 @@ function drawSpeakerO(cx: number, cy: number, radius: number, t: number) {
   const frameGrad = c.createRadialGradient(cx, cy, radius * 0.7, cx, cy, radius);
   frameGrad.addColorStop(0.0, '#1a103c');
   frameGrad.addColorStop(0.7, '#0d0722');
-  frameGrad.addColorStop(1.0, '#00f7ff');
+  frameGrad.addColorStop(1.0, hex(MENU_CYAN));
 
   c.beginPath();
-  c.arc(cx, cy, radius, 0, Math.PI * 2);
+  c.arc(cx, cy, radius, 0, TAU);
   c.fillStyle = frameGrad;
   c.fill();
 
   c.strokeStyle = 'rgba(0, 247, 255, 0.85)';
   c.lineWidth = Math.max(1.5, radius * 0.06);
-  c.shadowColor = '#00f7ff';
+  c.shadowColor = hex(MENU_CYAN);
   c.shadowBlur = 10;
   c.stroke();
   c.shadowBlur = 0;
 
   c.beginPath();
-  c.arc(cx, cy, radius * 0.82, 0, Math.PI * 2);
+  c.arc(cx, cy, radius * 0.82, 0, TAU);
   c.fillStyle = '#0a0618';
   c.fill();
   c.strokeStyle = '#221545';
@@ -1102,7 +1090,7 @@ function drawSpeakerO(cx: number, cy: number, radius: number, t: number) {
   coneGrad.addColorStop(1.0, '#090314');
 
   c.beginPath();
-  c.arc(cx, cy, radius * 0.76, 0, Math.PI * 2);
+  c.arc(cx, cy, radius * 0.76, 0, TAU);
   c.fillStyle = coneGrad;
   c.fill();
 
@@ -1110,7 +1098,7 @@ function drawSpeakerO(cx: number, cy: number, radius: number, t: number) {
   c.lineWidth = 1;
   [0.62, 0.48, 0.36].forEach(rRatio => {
     c.beginPath();
-    c.arc(cx, cy, radius * rRatio, 0, Math.PI * 2);
+    c.arc(cx, cy, radius * rRatio, 0, TAU);
     c.stroke();
   });
 
@@ -1119,25 +1107,25 @@ function drawSpeakerO(cx: number, cy: number, radius: number, t: number) {
     cx - capRadius * 0.3, cy - capRadius * 0.3, capRadius * 0.1,
     cx, cy, capRadius
   );
-  capGrad.addColorStop(0.0, '#ffffff');
-  capGrad.addColorStop(0.3, '#00f7ff');
+  capGrad.addColorStop(0.0, WHITE_HEX);
+  capGrad.addColorStop(0.3, hex(MENU_CYAN));
   capGrad.addColorStop(0.7, '#0088cc');
   capGrad.addColorStop(1.0, '#003355');
 
   c.beginPath();
-  c.arc(cx, cy, capRadius, 0, Math.PI * 2);
+  c.arc(cx, cy, capRadius, 0, TAU);
   c.fillStyle = capGrad;
-  c.shadowColor = '#00f7ff';
+  c.shadowColor = hex(MENU_CYAN);
   c.shadowBlur = 8;
   c.fill();
   c.shadowBlur = 0;
 
   c.beginPath();
-  c.arc(cx - capRadius * 0.35, cy - capRadius * 0.35, Math.max(1, capRadius * 0.25), 0, Math.PI * 2);
+  c.arc(cx - capRadius * 0.35, cy - capRadius * 0.35, Math.max(1, capRadius * 0.25), 0, TAU);
   c.fillStyle = 'rgba(255, 255, 255, 0.85)';
   c.fill();
 
-  c.strokeStyle = '#00f7ff';
+  c.strokeStyle = hex(MENU_CYAN);
   c.lineCap = 'round';
 
   for (let wave = 1; wave <= 2; wave++) {
@@ -1166,7 +1154,7 @@ function drawWhiteBilliardBall(cx: number, cy: number, radius: number) {
   c.save();
 
   c.beginPath();
-  c.ellipse(cx, cy + radius * 0.94, radius * 0.85, radius * 0.26, 0, 0, Math.PI * 2);
+  c.ellipse(cx, cy + radius * 0.94, radius * 0.85, radius * 0.26, 0, 0, TAU);
   c.fillStyle = 'rgba(2, 1, 8, 0.9)';
   if (c.filter) c.filter = 'blur(5px)';
   c.fill();
@@ -1180,7 +1168,7 @@ function drawWhiteBilliardBall(cx: number, cy: number, radius: number) {
     cx + radius * 0.25, cy + radius * 0.30, radius * 1.15
   );
 
-  bodyGrad.addColorStop(0.00, '#ffffff');
+  bodyGrad.addColorStop(0.00, WHITE_HEX);
   bodyGrad.addColorStop(0.20, '#e2e8f0');
   bodyGrad.addColorStop(0.40, '#94a3b8');
   bodyGrad.addColorStop(0.68, '#475569');
@@ -1188,13 +1176,13 @@ function drawWhiteBilliardBall(cx: number, cy: number, radius: number) {
   bodyGrad.addColorStop(1.00, '#0f172a');
 
   c.beginPath();
-  c.arc(cx, cy, radius, 0, Math.PI * 2);
+  c.arc(cx, cy, radius, 0, TAU);
   c.fillStyle = bodyGrad;
   c.fill();
 
   c.save();
   c.beginPath();
-  c.arc(cx, cy, radius, 0, Math.PI * 2);
+  c.arc(cx, cy, radius, 0, TAU);
   c.clip();
 
   const rimGrad = c.createRadialGradient(
@@ -1212,8 +1200,8 @@ function drawWhiteBilliardBall(cx: number, cy: number, radius: number) {
   c.rotate(-Math.PI / 4.2);
 
   const boxGrad = c.createLinearGradient(0, -radius * 0.08, 0, radius * 0.08);
-  boxGrad.addColorStop(0.0, '#ffffff');
-  boxGrad.addColorStop(0.5, '#ffffff');
+  boxGrad.addColorStop(0.0, WHITE_HEX);
+  boxGrad.addColorStop(0.5, WHITE_HEX);
   boxGrad.addColorStop(1.0, 'rgba(255, 255, 255, 0.90)');
   c.fillStyle = boxGrad;
   c.beginPath();
@@ -1222,14 +1210,14 @@ function drawWhiteBilliardBall(cx: number, cy: number, radius: number) {
   } else {
     c.rect(-radius * 0.22, -radius * 0.07, radius * 0.44, radius * 0.14);
   }
-  c.shadowColor = '#00f7ff';
+  c.shadowColor = hex(MENU_CYAN);
   c.shadowBlur = 8;
   c.fill();
 
   c.beginPath();
-  c.arc(-radius * 0.08, -radius * 0.02, radius * 0.038, 0, Math.PI * 2);
-  c.fillStyle = '#ffffff';
-  c.shadowColor = '#00f7ff';
+  c.arc(-radius * 0.08, -radius * 0.02, radius * 0.038, 0, TAU);
+  c.fillStyle = WHITE_HEX;
+  c.shadowColor = hex(MENU_CYAN);
   c.shadowBlur = 10;
   c.fill();
 
@@ -1244,10 +1232,10 @@ function drawWhiteBilliardBall(cx: number, cy: number, radius: number) {
   c.restore();
 
   c.beginPath();
-  c.arc(cx, cy, radius, 0, Math.PI * 2);
+  c.arc(cx, cy, radius, 0, TAU);
   c.strokeStyle = 'rgba(0, 247, 255, 0.9)';
   c.lineWidth = Math.max(3.5, radius * 0.09);
-  c.shadowColor = '#00f7ff';
+  c.shadowColor = hex(MENU_CYAN);
   c.shadowBlur = 10;
   c.stroke();
   c.shadowBlur = 0;
@@ -1261,7 +1249,7 @@ function drawBlackBilliardBall(cx: number, cy: number, radius: number) {
   c.save();
 
   c.beginPath();
-  c.ellipse(cx, cy + radius * 0.94, radius * 0.85, radius * 0.26, 0, 0, Math.PI * 2);
+  c.ellipse(cx, cy + radius * 0.94, radius * 0.85, radius * 0.26, 0, 0, TAU);
   c.fillStyle = 'rgba(2, 1, 8, 0.95)';
   if (c.filter) c.filter = 'blur(5px)';
   c.fill();
@@ -1278,16 +1266,16 @@ function drawBlackBilliardBall(cx: number, cy: number, radius: number) {
   bodyGrad.addColorStop(0.00, '#484c60');
   bodyGrad.addColorStop(0.18, '#1e202c');
   bodyGrad.addColorStop(0.45, '#050609');
-  bodyGrad.addColorStop(1.00, '#000000');
+  bodyGrad.addColorStop(1.00, BLACK_HEX);
 
   c.beginPath();
-  c.arc(cx, cy, radius, 0, Math.PI * 2);
+  c.arc(cx, cy, radius, 0, TAU);
   c.fillStyle = bodyGrad;
   c.fill();
 
   c.save();
   c.beginPath();
-  c.arc(cx, cy, radius, 0, Math.PI * 2);
+  c.arc(cx, cy, radius, 0, TAU);
   c.clip();
 
   const rimGrad = c.createRadialGradient(
@@ -1306,7 +1294,7 @@ function drawBlackBilliardBall(cx: number, cy: number, radius: number) {
 
   const boxGrad = c.createLinearGradient(0, -radius * 0.08, 0, radius * 0.08);
   boxGrad.addColorStop(0.0, 'rgba(255, 255, 255, 0.90)');
-  boxGrad.addColorStop(0.5, '#ffffff');
+  boxGrad.addColorStop(0.5, WHITE_HEX);
   boxGrad.addColorStop(1.0, 'rgba(255, 255, 255, 0.50)');
   c.fillStyle = boxGrad;
   c.beginPath();
@@ -1315,14 +1303,14 @@ function drawBlackBilliardBall(cx: number, cy: number, radius: number) {
   } else {
     c.rect(-radius * 0.22, -radius * 0.07, radius * 0.44, radius * 0.14);
   }
-  c.shadowColor = '#ff007f';
+  c.shadowColor = hex(MENU_PINK_DEEP);
   c.shadowBlur = 8;
   c.fill();
 
   c.beginPath();
-  c.arc(-radius * 0.08, -radius * 0.02, radius * 0.038, 0, Math.PI * 2);
-  c.fillStyle = '#ffffff';
-  c.shadowColor = '#ff007f';
+  c.arc(-radius * 0.08, -radius * 0.02, radius * 0.038, 0, TAU);
+  c.fillStyle = WHITE_HEX;
+  c.shadowColor = hex(MENU_PINK_DEEP);
   c.shadowBlur = 10;
   c.fill();
 
@@ -1337,10 +1325,10 @@ function drawBlackBilliardBall(cx: number, cy: number, radius: number) {
   c.restore();
 
   c.beginPath();
-  c.arc(cx, cy, radius, 0, Math.PI * 2);
+  c.arc(cx, cy, radius, 0, TAU);
   c.strokeStyle = 'rgba(255, 0, 127, 0.9)';
   c.lineWidth = Math.max(3.5, radius * 0.09);
-  c.shadowColor = '#ff007f';
+  c.shadowColor = hex(MENU_PINK_DEEP);
   c.shadowBlur = 10;
   c.stroke();
   c.shadowBlur = 0;
@@ -1357,24 +1345,24 @@ function drawImpactBoom(cx: number, cy: number, radius: number, t: number) {
   const boomR = radius * 0.70 * energyPulse;
 
   const flashGrad = c.createRadialGradient(cx, cy, 0, cx, cy, boomR);
-  flashGrad.addColorStop(0.00, '#ffffff');
+  flashGrad.addColorStop(0.00, WHITE_HEX);
   flashGrad.addColorStop(0.30, '#ffff55');
-  flashGrad.addColorStop(0.65, '#ff00aa');
+  flashGrad.addColorStop(0.65, hex(MENU_PINK));
   flashGrad.addColorStop(1.00, 'rgba(0, 247, 255, 0)');
 
   c.beginPath();
-  c.arc(cx, cy, boomR, 0, Math.PI * 2);
+  c.arc(cx, cy, boomR, 0, TAU);
   c.fillStyle = flashGrad;
-  c.shadowColor = '#ff00aa';
+  c.shadowColor = hex(MENU_PINK);
   c.shadowBlur = 18 * energyPulse;
   c.fill();
 
   const numSpikes = 12;
-  c.shadowColor = '#ffffff';
+  c.shadowColor = WHITE_HEX;
   c.shadowBlur = 6;
 
   for (let i = 0; i < numSpikes; i++) {
-    const angle = (i * Math.PI * 2 / numSpikes) + Math.sin(t * 0.05 + i * 0.5) * 0.1;
+    const angle = (i * TAU / numSpikes) + Math.sin(t * 0.05 + i * 0.5) * 0.1;
     const spikeLen = (i % 2 === 0 ? radius * 0.85 : radius * 0.50) * (0.85 + Math.sin(t * 0.15 + i) * 0.2);
 
     const x1 = cx + Math.cos(angle) * (radius * 0.1);
@@ -1383,8 +1371,8 @@ function drawImpactBoom(cx: number, cy: number, radius: number, t: number) {
     const y2 = cy + Math.sin(angle) * spikeLen;
 
     const rayGrad = c.createLinearGradient(x1, y1, x2, y2);
-    rayGrad.addColorStop(0.0, '#ffffff');
-    rayGrad.addColorStop(0.4, (i % 2 === 0 ? '#00f7ff' : '#ff00aa'));
+    rayGrad.addColorStop(0.0, WHITE_HEX);
+    rayGrad.addColorStop(0.4, (i % 2 === 0 ? hex(MENU_CYAN) : hex(MENU_PINK)));
     rayGrad.addColorStop(1.0, 'rgba(255, 255, 255, 0)');
 
     c.strokeStyle = rayGrad;
@@ -1419,14 +1407,14 @@ function drawPhysicalSplitLettering(text: string, x: number, y: number, fontSize
 
   const halfH = fontSize * 0.50;
   const splitGrad = c.createLinearGradient(x, y - halfH, x, y + halfH);
-  splitGrad.addColorStop(0.00, '#ffffff');
+  splitGrad.addColorStop(0.00, WHITE_HEX);
   splitGrad.addColorStop(0.12, '#8affff');
-  splitGrad.addColorStop(0.35, '#00f7ff');
+  splitGrad.addColorStop(0.35, hex(MENU_CYAN));
   splitGrad.addColorStop(0.48, '#00b8e6');
-  splitGrad.addColorStop(0.50, '#ffffff');
-  splitGrad.addColorStop(0.52, '#ffffff');
-  splitGrad.addColorStop(0.55, '#ff00aa');
-  splitGrad.addColorStop(0.75, '#ff007f');
+  splitGrad.addColorStop(0.50, WHITE_HEX);
+  splitGrad.addColorStop(0.52, WHITE_HEX);
+  splitGrad.addColorStop(0.55, hex(MENU_PINK));
+  splitGrad.addColorStop(0.75, hex(MENU_PINK_DEEP));
   splitGrad.addColorStop(0.92, '#b30059');
   splitGrad.addColorStop(1.00, '#420021');
 
@@ -1531,13 +1519,13 @@ function drawMenu(layout: MenuLayout) {
       c.fill();
 
       const borderGrad = c.createLinearGradient(btn.x, btn.y, btn.x + btn.width, btn.y);
-      borderGrad.addColorStop(0.00, '#00f7ff');
+      borderGrad.addColorStop(0.00, hex(MENU_CYAN));
       borderGrad.addColorStop(0.45, '#00e1ff');
-      borderGrad.addColorStop(0.55, '#ff00aa');
-      borderGrad.addColorStop(1.00, '#ff007f');
+      borderGrad.addColorStop(0.55, hex(MENU_PINK));
+      borderGrad.addColorStop(1.00, hex(MENU_PINK_DEEP));
       c.strokeStyle = borderGrad;
       c.lineWidth = 2.4;
-      c.shadowColor = 'rgba(0, 247, 255, 0.95)';
+      c.shadowColor = rgba(MENU_CYAN, 0.95);
       c.shadowBlur = 10;
       c.stroke();
 
@@ -1578,8 +1566,8 @@ function drawMenu(layout: MenuLayout) {
     c.textBaseline = 'middle';
 
     if (isHovered || isClicked) {
-      c.fillStyle = '#ffffff';
-      c.shadowColor = '#00f7ff';
+      c.fillStyle = WHITE_HEX;
+      c.shadowColor = hex(MENU_CYAN);
       c.shadowBlur = 10;
       c.fillText(btn.text, width / 2, btn.y + btn.height / 2);
       c.shadowBlur = 0;
