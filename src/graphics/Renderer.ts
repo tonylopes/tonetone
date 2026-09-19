@@ -4,6 +4,7 @@ import { uiFont } from './Fonts';
 import { ballSprite, inkOn, SP_R, SPRITE } from './Sprites';
 import { BG_SCALE, FLASH_SPECS, drawLiquid } from './VisualFX';
 import { FLASH_LIFE, POP_LIFE } from '../physics/Types';
+import { setHidden } from '../ui/Dom';
 import { aimDirOf, aimReachOf, launchPointOf, mouthRadius, throwSpeedOf } from '../physics/LauncherBays';
 import { LauncherPlayer } from '../physics/Types';
 import { kindLabel } from '../game/Rules';
@@ -407,10 +408,10 @@ export function drawResultsCanvas(rc: RenderContext, game: Game) {
 
   ctx.clearRect(0, 0, W, H);
   if (!game.matchOver) {
-    rc.resCv.setAttribute('hidden', '');
+    setHidden(rc.resCv, true);
     return;
   }
-  rc.resCv.removeAttribute('hidden');
+  setHidden(rc.resCv, false);
 
   const R = PhysicsConfig.R;
 

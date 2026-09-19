@@ -1,6 +1,8 @@
 import { Game } from '../game/GameState';
 import { P_COLOR } from '../graphics/Renderer';
 import { initAudio, fadeDroneForResults } from '../audio/SynthEngine';
+import { formatClock } from '../game/Clock';
+import { setHidden } from './Dom';
 
 /**
  * `updateHUD` runs inside the rAF callback on every frame, but almost nothing it
@@ -61,24 +63,16 @@ export function updateHUD(game: Game) {
     const want = game.twoPlayer ? 'shown' : 'hidden';
     const memo = lastWritten.get(scoreP2Wrap1);
     if (!memo || memo.hiddenState !== want) {
-      if (game.twoPlayer) scoreP2Wrap1.removeAttribute('hidden');
-      else scoreP2Wrap1.setAttribute('hidden', '');
+      setHidden(scoreP2Wrap1, !game.twoPlayer);
       if (memo) memo.hiddenState = want;
       else lastWritten.set(scoreP2Wrap1, { hiddenState: want });
     }
   }
 
-  // Time display
-  let timeStr = '';
-  if (game.matchLen > 0) {
-    const left = Math.max(0, game.matchLen - game.matchT);
-    const mm = Math.floor(left / 60), ss = Math.floor(left % 60);
-    timeStr = `${mm}:${String(ss).padStart(2, '0')}`;
-  } else {
-    const t = Math.floor(game.matchT);
-    const mm = Math.floor(t / 60), ss = Math.floor(t % 60);
-    timeStr = `${mm}:${String(ss).padStart(2, '0')}`;
-  }
+  // Time display: time left in a windowed match, time elapsed in an endless one.
+  const timeStr = formatClock(
+    game.matchLen > 0 ? Math.max(0, game.matchLen - game.matchT) : game.matchT
+  );
 
   write(el('time1'), 'textContent', timeStr);
   write(el('time2'), 'textContent', timeStr);
@@ -147,17 +141,17 @@ export function endMatchUI(game: Game, onRestart: () => void) {
   const c1 = document.getElementById('overcard1'), c2 = document.getElementById('overcard2');
   if (c1) c1.innerHTML = makeCard(0);
   if (solo || game.aiOn) {
-    if (c2) c2.setAttribute('hidden', '');
+    setHidden(c2, true);
   } else {
     if (c2) {
       c2.innerHTML = makeCard(1);
-      c2.removeAttribute('hidden');
+      setHidden(c2, false);
     }
   }
 
   const overEl = document.getElementById('over');
   if (overEl) {
-    overEl.removeAttribute('hidden');
+    setHidden(overEl, false);
     if (!(overEl as any)._boundRestart && overEl.addEventListener) {
       (overEl as any)._boundRestart = true;
       overEl.addEventListener('click', e => {

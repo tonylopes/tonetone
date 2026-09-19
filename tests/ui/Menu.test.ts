@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { initMenuScreen, showMenu, hideMenu, isMenuVisible, computeMenuLayout, playBinauralClick, resetBinauralAudioStateForTesting } from '../../src/ui/MenuScreen';
 import { AudioStore } from '../../src/audio/SynthEngine';
+import type { PlayMode } from '../../src/game/GameState';
 
 class MockElement {
   attributes: Record<string, string> = {};
@@ -82,7 +83,7 @@ describe('MenuScreen', () => {
   });
 
   it('initializes and toggles menu visibility correctly', () => {
-    let selectedMode = -1;
+    let selectedMode: PlayMode | null = null;
     initMenuScreen((mode) => {
       selectedMode = mode;
     });

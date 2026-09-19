@@ -3,6 +3,8 @@ import { playNote, playRandomGameBoom } from '../audio/Voices';
 import { Flash, Pop } from '../physics/Types';
 import { CURRENTS, FLASH_SPECS } from '../graphics/VisualFX';
 import { FLASH_LIFE, POP_LIFE } from '../physics/Types';
+import { PlayMode } from '../game/GameState';
+import { setHidden } from './Dom';
 import { ballSprite, clearSpriteCache, glowSprite } from '../graphics/Sprites';
 import { uiFont, logoFont } from '../graphics/Fonts';
 import { colorOfKind, randomKind, BLACK, WHITE } from '../game/Rules';
@@ -33,7 +35,7 @@ let animFrame = 0;
 let animationId = 0;
 let menuActive = false;
 
-let onModeSelectCallback: ((mode: number) => void) | null = null;
+let onModeSelectCallback: ((mode: PlayMode) => void) | null = null;
 let onOptionsCallback: (() => void) | null = null;
 
 const pointer = { x: -1000, y: -1000, isDown: false };
@@ -668,7 +670,7 @@ function updateFsBtnLabel() {
     const docEl = typeof document !== 'undefined' ? (document.documentElement as any) : null;
     const fsRequest = docEl ? (docEl.requestFullscreen || docEl.webkitRequestFullscreen || null) : null;
     if (!fsRequest) {
-      fsBtn.setAttribute('hidden', '');
+      setHidden(fsBtn, true);
       return;
     }
     const isFs = typeof document !== 'undefined' && !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
@@ -847,11 +849,11 @@ function handleInteraction(px?: number, py?: number) {
     const selectedItem = menuItems[targetIndex];
     if (selectedItem) {
       if (selectedItem.action === 'solo') {
-        setTimeout(() => triggerSelection(1), 120);
+        setTimeout(() => triggerSelection('solo'), 120);
       } else if (selectedItem.action === 'one_player') {
-        setTimeout(() => triggerSelection(3), 120);
+        setTimeout(() => triggerSelection('ai'), 120);
       } else if (selectedItem.action === 'two_player') {
-        setTimeout(() => triggerSelection(2), 120);
+        setTimeout(() => triggerSelection('duel'), 120);
       } else if (selectedItem.action === 'options') {
         setTimeout(() => {
           clickedItemIndex = -1;
@@ -864,7 +866,7 @@ function handleInteraction(px?: number, py?: number) {
 
 let isTransitioning = false;
 
-function triggerSelection(mode: number) {
+function triggerSelection(mode: PlayMode) {
   if (isTransitioning) return;
   isTransitioning = true;
 
@@ -895,7 +897,7 @@ function hideMenuImmediate() {
     menuContainer = document.getElementById('menu-screen');
   }
   if (menuContainer) {
-    menuContainer.setAttribute('hidden', '');
+    setHidden(menuContainer, true);
   }
   menuActive = false;
   if (animationId) {
@@ -935,11 +937,11 @@ export function showMenu() {
     if (typeof window !== 'undefined') {
       menuContainer.classList.remove('slide-out', 'slide-out-right');
       menuContainer.classList.add('slide-in-start');
-      menuContainer.removeAttribute('hidden');
+      setHidden(menuContainer, false);
       void menuContainer.offsetWidth;
       menuContainer.classList.remove('slide-in-start');
     } else {
-      menuContainer.removeAttribute('hidden');
+      setHidden(menuContainer, false);
     }
   }
   menuActive = true;
@@ -1639,7 +1641,7 @@ function renderLoop() {
   animationId = safeRequestAnimationFrame(renderLoop);
 }
 
-export function initMenuScreen(onSelectMode: (mode: number) => void, onOptions?: () => void) {
+export function initMenuScreen(onSelectMode: (mode: PlayMode) => void, onOptions?: () => void) {
   onModeSelectCallback = onSelectMode;
   onOptionsCallback = onOptions || null;
   menuContainer = document.getElementById('menu-screen');
@@ -1714,7 +1716,7 @@ export function initMenuScreen(onSelectMode: (mode: number) => void, onOptions?:
     const fsExit = typeof document !== 'undefined' ? (document.exitFullscreen || (document as any).webkitExitFullscreen || null) : null;
 
     if (!fsRequest) {
-      fsBtn.setAttribute('hidden', '');
+      setHidden(fsBtn, true);
     } else {
       fsBtn.addEventListener('click', (e) => {
         e.stopPropagation();

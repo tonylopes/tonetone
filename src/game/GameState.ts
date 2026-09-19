@@ -8,6 +8,17 @@ import { panOf } from '../audio/SoundEvents';
 import { CollisionState } from '../physics/CollisionSolver';
 import { stopAllVoices } from '../audio/SynthEngine';
 
+/**
+ * How the seats are filled for a match.
+ *
+ * The menu used to hand `main.ts` a bare number (1 solo, 2 duel, 3 vs AI) while
+ * the harness named the same three arrangements in strings, so the two halves of
+ * the codebase described one concept twice and neither name reached the other.
+ * This is the shared name; the harness's `Mode` adds `idle`, which has no menu
+ * entry because nobody throws in it.
+ */
+export type PlayMode = 'solo' | 'duel' | 'ai';
+
 export function makeLauncher(side: number): LauncherPlayer {
   return {
     side,

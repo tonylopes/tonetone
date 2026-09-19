@@ -7,7 +7,7 @@
  * shipping simulation rather than a copy of it.
  */
 import {
-  Game, createGame, liveBallCount, lowDensityThreshold, resetField, startMatch,
+  Game, PlayMode, createGame, liveBallCount, lowDensityThreshold, resetField, startMatch,
 } from '../game/GameState';
 import { LauncherPlayer, Shot } from '../physics/Types';
 import { recalcThresholds } from '../physics/Config';
@@ -54,7 +54,7 @@ export const LONG_CHAIN = 8;
  */
 export type PolicyName = 'engine-ai' | 'fixed' | 'random' | 'sweep';
 
-export type Mode = 'solo' | 'duel' | 'ai' | 'idle';
+export type Mode = PlayMode | 'idle';
 
 export interface SimOptions {
   /** Seed for the run. The same seed reproduces the run exactly. */

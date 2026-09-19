@@ -588,6 +588,19 @@ export function stepPhysics(state: CollisionState, dt: number, now: number, widt
   }
   ageGhosts(state, dt);
   clearExempt(state.balls, state.players, dt, width, height);
+  ageEffects(state, dt);
+}
+
+/**
+ * Age the flashes and the score pops by `dt`, dropping the expired ones.
+ *
+ * Both the match and the results celebration spawn these, and both used to run
+ * their own copy of this loop — so the two could drift apart in what they
+ * counted as expired. `FLASH_LIFE` and `POP_LIFE` were already shared; this
+ * makes the lifecycle shared too. The state is typed structurally so the
+ * celebration can pass the `Game` straight in.
+ */
+export function ageEffects(state: { flashes: Flash[]; pops: Pop[] }, dt: number) {
   for (const f of state.pops) f.t += dt;
   if (state.pops.length) state.pops = state.pops.filter(f => f.t < POP_LIFE);
   for (const f of state.flashes) f.t += dt;

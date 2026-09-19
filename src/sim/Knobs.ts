@@ -15,6 +15,7 @@ import { Game } from '../game/GameState';
 import { PhysicsConfig, chainPercent, recalcThresholds } from '../physics/Config';
 import { COLORS, SHOT_DECAY, SPECIALS, colorOfKind, setColorsCount, setShotDecay, setSpecialsToggle } from '../game/Rules';
 import { AudioStore, applyDrone, applyGain, buildScale, setLatencyHint } from '../audio/SynthEngine';
+import { formatClock } from '../game/Clock';
 
 export type KnobValue = number | string;
 
@@ -102,7 +103,7 @@ const KNOB_SPECS = {
     // still has to name it.
     group: 'game', kind: 'range', min: 60, max: 1200, step: 30, default: 120,
     apply: (v, { game }) => { game.matchLen = v; },
-    format: v => (v === 0 ? 'endless' : Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0')),
+    format: v => (v === 0 ? 'endless' : formatClock(v)),
     read: ({ game }) => game.matchLen,
   },
 
