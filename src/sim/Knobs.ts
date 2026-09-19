@@ -270,7 +270,7 @@ const KNOB_SPECS = {
   },
 
   lock: {
-    group: 'audio', kind: 'range', min: 0, max: 2, step: 0.05, default: 0.5, wakesAudio: true, cosmetic: true,
+    group: 'audio', kind: 'range', min: 0, max: 2, step: 0.05, default: 1, wakesAudio: true, cosmetic: true,
     apply: v => { AudioStore.lockVol = v; },
     format: v => pct(v),
     read: () => AudioStore.lockVol,

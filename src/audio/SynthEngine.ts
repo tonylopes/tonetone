@@ -110,7 +110,7 @@ export const AudioStore: AudioState = {
   swooshAt: -9,
   thuds: 0,
   volume: 0.9,
-  lockVol: 0.5,
+  lockVol: 1,
   breakVol: 1.7,
   boomVol: 1,
   clickVol: 0.5,

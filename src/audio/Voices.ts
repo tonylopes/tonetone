@@ -2,7 +2,7 @@ import { AudioStore, BEAT, SILENCE, isOptionsOpen, loadAt_, MAX_THUDS, MAX_VOICE
 import { boomTierOf, BOOM_TIER_COUNT as RULES_BOOM_TIER_COUNT } from '../game/Rules';
 
 export const BREAK_VOICE = {
-  mul: 1, dur: 0.42, jitter: 0.10, peak: 0.18, attack: 0.010, tick: 0.10,
+  mul: 1, dur: 0.42, jitter: 0.10, peak: 0.30, attack: 0.010, tick: 0.10,
   partials: [[1, 1], [2, 0.34]] as [number, number][], open: 2600, close: 700, dry: 0.62
 };
 
@@ -13,7 +13,7 @@ export const BREAK_VOICE = {
  * booms and breaks on A.
  */
 export const BOND_VOICE = {
-  mul: 2, dur: 0.32, jitter: 0.18, peak: 0.22, attack: 0.004, tick: 0.26,
+  mul: 2, dur: 0.32, jitter: 0.18, peak: 0.36, attack: 0.004, tick: 0.26,
   partials: [[1, 1], [2, 0.42]] as [number, number][], open: 3400, close: 1000, dry: 0.62
 };
 
@@ -296,7 +296,7 @@ const BOOM_DRIVE = 0.65;
  * reaching the output every tier is genuinely at its ramp value rather than
  * compressed up towards the loudest one.
  */
-const BOOM_OUTPUT = 0.32;
+const BOOM_OUTPUT = 0.26;
 
 /**
  * Volume by tier, one ramp per variant. **Neither is monotonic**, and neither
@@ -1081,7 +1081,7 @@ function playWhiteSwoosh(xNorm: number, normForce: number) {
 
   // Narrow bandpasses pass far less of the noise than a wide lowpass does, so
   // this runs well above the level the old mono swoosh used for the same swing.
-  const peak = 0.34 * Math.max(0.15, normForce) * AudioStore.clickVol;
+  const peak = 0.20 * Math.max(0.15, normForce) * AudioStore.clickVol;
   if (peak < 0.001) return;
 
   triggerHaptic('heavy');
