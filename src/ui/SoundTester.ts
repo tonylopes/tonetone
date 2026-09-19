@@ -1,15 +1,76 @@
-import { AudioStore, initAudio, applyGain } from '../audio/SynthEngine';
-import { playNote, playThud, playKnock, playCountdownTick, playBurstBassBoom, getBurstBassBoomProps, playMagneticElectricSound } from '../audio/Voices';
+import { AudioStore, BEAT, initAudio, applyGain } from '../audio/SynthEngine';
+import { playNote, playThud, playKnock, playCountdownTick, playBoom, getBoomProps, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
 import { playBinauralClick } from './MenuScreen';
 
 export interface SoundDef {
   id: string;
   name: string;
-  category: 'Game FX' | 'Burst Levels' | 'System & UI';
+  category: 'Game FX' | 'Boom Levels' | 'Black & White Levels' | 'System & UI';
   situation: string;
   getParamsText: () => string;
   play: () => void;
 }
+
+
+/**
+ * The five boom-size tiers the boom voice and the magnet lock both scale on.
+ * Each entry's `boomSize` is a representative size inside that tier.
+ */
+const LEVEL_TIERS: { boomSize: number; label: string }[] = [
+  { boomSize: 3, label: 'Level 0-5 (0..4 balls)' },
+  { boomSize: 7, label: 'Level 5-10 (5..9 balls)' },
+  { boomSize: 12, label: 'Level 10-15 (10..14 balls)' },
+  { boomSize: 18, label: 'Level 15-20 (15..19 balls)' },
+  { boomSize: 25, label: 'Level 20+ (20+ balls)' },
+];
+
+function echoText(boomSize: number, whiteBlack: boolean): string {
+  const e = boomEchoSpec(boomSize, whiteBlack);
+  return `Echo: ${Math.round(e.left * 1000)}/${Math.round(e.right * 1000)}ms cross-fed, fb ${e.feedback.toFixed(2)}, tail ${e.tail.toFixed(1)}s`;
+}
+
+/** White-on-black boom, one card per tier: the lifted, ringing boom. */
+const WHITE_BLACK_LEVELS: SoundDef[] = LEVEL_TIERS.map(({ boomSize, label }) => ({
+  id: `wb_boom_${boomSize}`,
+  name: `White-on-Black Boom — ${label}`,
+  category: 'Black & White Levels',
+  situation: `A white cue ball reaches a ${boomSize}-ball group holding a black — the only way a black is destroyed`,
+  getParamsText: () => {
+    const p = getBoomProps(boomSize);
+    const tone = p.tone * 1.8;
+    const wbVol = getWhiteBlackBoomVol(boomSize);
+    const loudest = wbVol >= getWhiteBlackBoomVol(12) ? ' ◀ LOUDEST' : '';
+    return `Lifted ×1.8 — Pitch Dive: ${Math.round(tone * 3.4)}Hz → ${Math.round(tone * 0.5)}Hz | + Struck-metal ring (×6, ×9.2) | Dur: ${(p.dur * 0.85).toFixed(2)}s | Level vol: ${wbVol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\n${echoText(boomSize, true)}`;
+  },
+  play: () => {
+    initAudio();
+    playNote(0.5, 0, 'boom', 1.0, boomSize, true, true);
+  },
+}));
+
+/** Black magnet lock, one card per tier, single black and black-on-black. */
+const BLACK_LOCK_LEVELS: SoundDef[] = LEVEL_TIERS.flatMap(({ boomSize, label }) =>
+  [false, true].map((isPair) => ({
+    id: `black_lock_${isPair ? 'pair' : 'single'}_${boomSize}`,
+    name: `${isPair ? 'Black + Black' : 'Black'} Magnet Lock — ${label}`,
+    category: 'Black & White Levels' as const,
+    situation: isPair
+      ? `Two blacks lock to each other, closing a ${boomSize}-ball group`
+      : `A coloured ball or group locks onto a black, closing a ${boomSize}-ball group`,
+    getParamsText: () => {
+      const l = getMagnetLockProps(boomSize);
+      // Read from the voice's own constants, so this readout cannot drift.
+      const lift = isPair ? PAIR_LIFT : 1;
+      const dur = l.dur * (isPair ? PAIR_DUR : 1);
+      const vol = l.vol * (isPair ? PAIR_VOL : 1);
+      return `Arc: ${Math.round(2400 * lift)}Hz → ${Math.round(450 * lift)}Hz | Dur: ${dur.toFixed(2)}s | Drive ×${l.drive.toFixed(2)} | Sub ×${(l.sub * (isPair ? PAIR_SUB_LIFT : 1)).toFixed(2)} | Vol: lockVol × ${vol.toFixed(2)} (${Math.round(AudioStore.lockVol * vol * 100)}%)`;
+    },
+    play: () => {
+      initAudio();
+      playMagneticElectricSound(0, true, isPair, boomSize);
+    },
+  }))
+);
 
 export const SOUND_CATALOG: SoundDef[] = [
   {
@@ -27,8 +88,8 @@ export const SOUND_CATALOG: SoundDef[] = [
     id: 'black_attach',
     name: 'Black Ball Magnet Lock',
     category: 'Game FX',
-    situation: 'A ball or group attaches to the black ball with an electric arc zap and magnetic suction snap',
-    getParamsText: () => `Electric Square Arc FM Zap + Bandpass Static Discharge + Magnetic Sub Snap | Controlled Vol (${Math.round(AudioStore.lockVol * 100)}%)`,
+    situation: 'A coloured ball or group attaches to a black ball with an electric arc zap and magnetic suction snap',
+    getParamsText: () => `Electric Square Arc FM Zap + Bandpass Static Discharge + Magnetic Sub Snap | Arc: 2400Hz → 450Hz | Controlled Vol (${Math.round(AudioStore.lockVol * 100)}%)`,
     play: () => {
       initAudio();
       playMagneticElectricSound(0, true);
@@ -36,7 +97,7 @@ export const SOUND_CATALOG: SoundDef[] = [
   },
   {
     id: 'break',
-    name: 'Break Shatter',
+    name: 'Bond Break',
     category: 'Game FX',
     situation: 'A bond line between balls is severed by high-speed impact or ghost ball detachment',
     getParamsText: () => `Voice: BREAK_VOICE (1.0× Pitch, 0.42s) | Vol: breakVol (${Math.round(AudioStore.breakVol * 100)}%) | Master: ${Math.round(AudioStore.volume * 100)}%`,
@@ -46,73 +107,78 @@ export const SOUND_CATALOG: SoundDef[] = [
     }
   },
   {
-    id: 'burst_l0',
-    name: 'Burst Boom — Level 0-5 (0..4 balls)',
-    category: 'Burst Levels',
-    situation: 'Small cluster explosion (2 to 4 balls shattered by a high-power cue shot)',
+    id: 'boom_l0',
+    name: 'Boom — Level 0-5 (0..4 balls)',
+    category: 'Boom Levels',
+    situation: 'Small boom (2 to 4 balls destroyed by a high-power cue shot)',
     getParamsText: () => {
-      const p = getBurstBassBoomProps(3);
-      return `Chain: 3 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s | Vol: burstVol (${Math.round(AudioStore.burstVol * 100)}%)`;
+      const p = getBoomProps(3);
+      const loudest = p.vol >= getBoomProps(18).vol ? ' ◀ LOUDEST' : '';
+      return `Boom size: 3 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(3, false).left * 1000)}/${Math.round(boomEchoSpec(3, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(3, false).feedback.toFixed(2)}, tail ${boomEchoSpec(3, false).tail.toFixed(1)}s`;
     },
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'burst', 1.0, 3, true);
+      playNote(0.5, 0, 'boom', 1.0, 3, true);
     }
   },
   {
-    id: 'burst_l1',
-    name: 'Burst Boom — Level 5-10 (5..9 balls)',
-    category: 'Burst Levels',
-    situation: 'Medium cluster explosion (5 to 9 bonded balls explode)',
+    id: 'boom_l1',
+    name: 'Boom — Level 5-10 (5..9 balls)',
+    category: 'Boom Levels',
+    situation: 'Medium boom (5 to 9 bonded balls destroyed)',
     getParamsText: () => {
-      const p = getBurstBassBoomProps(7);
-      return `Chain: 7 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s | Vol: burstVol (${Math.round(AudioStore.burstVol * 100)}%)`;
+      const p = getBoomProps(7);
+      const loudest = p.vol >= getBoomProps(18).vol ? ' ◀ LOUDEST' : '';
+      return `Boom size: 7 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(7, false).left * 1000)}/${Math.round(boomEchoSpec(7, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(7, false).feedback.toFixed(2)}, tail ${boomEchoSpec(7, false).tail.toFixed(1)}s`;
     },
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'burst', 1.0, 7, true);
+      playNote(0.5, 0, 'boom', 1.0, 7, true);
     }
   },
   {
-    id: 'burst_l2',
-    name: 'Burst Boom — Level 10-15 (10..14 balls)',
-    category: 'Burst Levels',
-    situation: 'Large cluster explosion (10 to 14 balls shatter into a heavy bass boom)',
+    id: 'boom_l2',
+    name: 'Boom — Level 10-15 (10..14 balls)',
+    category: 'Boom Levels',
+    situation: 'Large boom (10 to 14 balls destroyed, with a heavy bass voice)',
     getParamsText: () => {
-      const p = getBurstBassBoomProps(12);
-      return `Chain: 12 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s | Vol: burstVol (${Math.round(AudioStore.burstVol * 100)}%)`;
+      const p = getBoomProps(12);
+      const loudest = p.vol >= getBoomProps(18).vol ? ' ◀ LOUDEST' : '';
+      return `Boom size: 12 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(12, false).left * 1000)}/${Math.round(boomEchoSpec(12, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(12, false).feedback.toFixed(2)}, tail ${boomEchoSpec(12, false).tail.toFixed(1)}s`;
     },
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'burst', 1.0, 12, true);
+      playNote(0.5, 0, 'boom', 1.0, 12, true);
     }
   },
   {
-    id: 'burst_l3',
-    name: 'Burst Boom — Level 15-20 (15..19 balls)',
-    category: 'Burst Levels',
-    situation: 'Massive cluster explosion (15 to 19 balls) with 808 sub-drop layer',
+    id: 'boom_l3',
+    name: 'Boom — Level 15-20 (15..19 balls)',
+    category: 'Boom Levels',
+    situation: 'Massive boom (15 to 19 balls) with 808 sub-drop layer',
     getParamsText: () => {
-      const p = getBurstBassBoomProps(18);
-      return `Chain: 18 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s + 808 Sub-Drop | Vol: burstVol (${Math.round(AudioStore.burstVol * 100)}%)`;
+      const p = getBoomProps(18);
+      const loudest = p.vol >= getBoomProps(18).vol ? ' ◀ LOUDEST' : '';
+      return `Boom size: 18 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s + 808 Sub-Drop | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(18, false).left * 1000)}/${Math.round(boomEchoSpec(18, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(18, false).feedback.toFixed(2)}, tail ${boomEchoSpec(18, false).tail.toFixed(1)}s`;
     },
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'burst', 1.0, 18, true);
+      playNote(0.5, 0, 'boom', 1.0, 18, true);
     }
   },
   {
-    id: 'burst_l4',
-    name: 'Burst Boom — Level 20+ (20+ balls)',
-    category: 'Burst Levels',
-    situation: 'Epic mega cluster explosion (20+ balls) with thunderous sub-drop layer',
+    id: 'boom_l4',
+    name: 'Boom — Level 20+ (20+ balls)',
+    category: 'Boom Levels',
+    situation: 'Epic mega boom (20+ balls) with thunderous sub-drop layer',
     getParamsText: () => {
-      const p = getBurstBassBoomProps(25);
-      return `Chain: 25 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s + 808 Sub-Drop | Vol: burstVol (${Math.round(AudioStore.burstVol * 100)}%)`;
+      const p = getBoomProps(25);
+      const loudest = p.vol >= getBoomProps(18).vol ? ' ◀ LOUDEST' : '';
+      return `Boom size: 25 balls | Pitch Dive: ${Math.round(p.tone * 3.4)}Hz → ${Math.round(p.tone * 0.5)}Hz | Dur: ${p.dur.toFixed(2)}s + 808 Sub-Drop | Level vol: ${p.vol.toFixed(2)}${loudest} | Vol: boomVol (${Math.round(AudioStore.boomVol * 100)}%)\nEcho: ${Math.round(boomEchoSpec(25, false).left * 1000)}/${Math.round(boomEchoSpec(25, false).right * 1000)}ms cross-fed, fb ${boomEchoSpec(25, false).feedback.toFixed(2)}, tail ${boomEchoSpec(25, false).tail.toFixed(1)}s`;
     },
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'burst', 1.0, 25, true);
+      playNote(0.5, 0, 'boom', 1.0, 25, true);
     }
   },
   {
@@ -139,10 +205,10 @@ export const SOUND_CATALOG: SoundDef[] = [
   },
   {
     id: 'white_swoosh',
-    name: 'White Ball Launch Swoosh (High Tone)',
+    name: 'White Ball Launch Swoosh (Metallic)',
     category: 'Game FX',
-    situation: 'Player releases a powerful white cue ball launch (higher tone sweep + dual volume + shimmer overtone)',
-    getParamsText: () => `High Noise Rate (1.75×) + Dual Sine Pitch (480Hz → 1150Hz) + Shimmer Sparkle | Dur: 0.28s | Soft Volume (${Math.round(AudioStore.clickVol * 89)}%)`,
+    situation: 'Player releases the white cue ball — a metal sheet swung past the ear, one resonator bank per side',
+    getParamsText: () => `Binaural metal-bar banks (× 1, 2.76, 5.40, 8.93 at Q 11–20) swept 520Hz → 1250Hz → 610Hz, sides ${BEAT}Hz apart | + binaural sub | Dur: 0.34s | Vol: knocks (${Math.round(AudioStore.clickVol * 100)}%)`,
     play: () => {
       initAudio();
       playThud('swoosh', 0, 0.7, true, true);
@@ -192,7 +258,9 @@ export const SOUND_CATALOG: SoundDef[] = [
       applyGain();
       playBinauralClick(220, 0.4, 0, 'select', 1.0, true);
     }
-  }
+  },
+  ...WHITE_BLACK_LEVELS,
+  ...BLACK_LOCK_LEVELS,
 ];
 
 let containerEl: HTMLElement | null = null;
@@ -213,7 +281,10 @@ export function renderSoundTester(targetContainer: HTMLElement) {
     const card = document.createElement('div');
     card.className = 'sound-card';
 
-    const catClass = sound.category === 'Game FX' ? 'game-fx' : sound.category === 'Burst Levels' ? 'burst-levels' : 'system-ui';
+    const catClass = sound.category === 'Game FX' ? 'game-fx'
+      : sound.category === 'Boom Levels' ? 'boom-levels'
+      : sound.category === 'Black & White Levels' ? 'bw-levels'
+      : 'system-ui';
 
     const info = document.createElement('div');
     info.className = 'sound-info';

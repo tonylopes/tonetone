@@ -3,11 +3,14 @@ import { PhysicsConfig, recalcThresholds } from '../physics/Config';
 import { uiFont } from './Fonts';
 import { ballSprite, inkOn, SP_R, SPRITE } from './Sprites';
 import { BG_SCALE, FLASH_LIFE, FLASH_SPECS, drawLiquid } from './VisualFX';
-import { aimDirOf, aimMaxReach, aimReachOf, launchPointOf, mouthRadius, throwSpeedOf } from '../physics/LauncherBays';
+import { aimDirOf, aimReachOf, launchPointOf, mouthRadius, throwSpeedOf } from '../physics/LauncherBays';
 import { LauncherPlayer } from '../physics/Types';
 import { kindLabel } from '../game/Rules';
 
 export const P_COLOR = ['#4ff0ff', '#ff1ad9'];
+
+/** Clearance a score pop keeps from the left and right edges of the canvas. */
+export const POP_EDGE_PAD = 6;
 
 export interface RenderContext {
   cv: HTMLCanvasElement;
@@ -73,8 +76,8 @@ export function resizeRenderer(rc: RenderContext, stageEl: HTMLElement, force = 
 
   // Derive every scale-dependent threshold from the field we just sized, through
   // the one function that owns the formula. Setting `SC` here by hand used to
-  // leave SHATTER_SPEED and KICKOUT_MAX behind at whatever height the tuning
-  // panel last happened to pass, so how hard a burst was to trigger drifted with
+  // leave BOOM_SPEED and KICKOUT_MAX behind at whatever height the tuning
+  // panel last happened to pass, so how hard a boom was to trigger drifted with
   // the screen and never updated on rotate.
   recalcThresholds(rc.H);
 }
@@ -194,19 +197,29 @@ export function drawGame(rc: RenderContext, game: Game, time: number) {
   drawPops(rc, game);
 }
 
+/** Keeps a pop's centre far enough from both edges for `width` of text to fit. */
+export function popCenterX(x: number, width: number, canvasWidth: number): number {
+  const half = width / 2 + POP_EDGE_PAD;
+  if (half * 2 >= canvasWidth) return canvasWidth / 2;
+  return Math.max(half, Math.min(canvasWidth - half, x));
+}
+
 export function drawPops(rc: RenderContext, game: Game) {
   if (!game.pops.length) return;
-  const ctx = rc.ctx;
+  const { ctx, W } = rc;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.globalCompositeOperation = 'source-over';
   for (const f of game.pops) {
     const k = f.t / 1.1;
     ctx.save();
-    ctx.translate(f.x, f.y);
+    ctx.font = uiFont(800, (17 + 8 * (1 - k)).toFixed(1));
+    // A pop is centred on the event that earned it, and now carries a word as
+    // well as its points, so one earned against a side wall would hang off the
+    // screen. Slide it back on rather than letting it clip.
+    ctx.translate(popCenterX(f.x, ctx.measureText(f.text).width, W), f.y);
     if (game.twoPlayer && f.who === 1) ctx.rotate(Math.PI);
     ctx.globalAlpha = Math.max(0, 1 - k * k);
-    ctx.font = uiFont(800, (17 + 8 * (1 - k)).toFixed(1));
     ctx.fillStyle = P_COLOR[f.who] || '#ffffff';
     ctx.shadowColor = '#000000';
     ctx.shadowBlur = 10;
@@ -232,7 +245,7 @@ export function drawOneLauncher(rc: RenderContext, game: Game, p: LauncherPlayer
   const R = PhysicsConfig.R;
   const dir = aimDirOf(p);
   const m = launchPointOf(p, W, H);
-  const burst = throwSpeedOf(p, game.twoPlayer) >= PhysicsConfig.SHATTER_SPEED;
+  const boom = throwSpeedOf(p, game.twoPlayer) >= PhysicsConfig.BOOM_SPEED;
   const ready = p.reload <= 0;
 
   const pIdx = game.players.indexOf(p) === 1 ? 1 : 0;
@@ -325,10 +338,9 @@ export function drawOneLauncher(rc: RenderContext, game: Game, p: LauncherPlayer
     }
   }
   const fade = ready ? 1 : 0.35;
-  const reach = aimReachOf(p, H, game.twoPlayer);
-  const lineReach = aimMaxReach(H, game.twoPlayer);
+  const reach = aimReachOf(p, W, H, game.twoPlayer);
   const aimColor =
-    (burst
+    (boom
       ? 'rgba(255,26,217,'
       : isP1
       ? 'rgba(79,240,255,'

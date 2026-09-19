@@ -9,7 +9,7 @@ import { setupSettingsKnobs } from './ui/SettingsModal';
 import { settingsLine } from './game/Settings';
 import { PhysicsConfig } from './physics/Config';
 import { initAudio, AudioStore, applyGain, fadeDroneForResults, fadeDroneForOptions, setOptionsOpenState, isOptionsOpen } from './audio/SynthEngine';
-import { playNote, playThud, playCountdownTick } from './audio/Voices';
+import { playNote, playThud, playCountdownTick, playRandomGameBoom } from './audio/Voices';
 import { initMenuScreen, showMenu, isMenuOccluding, playBinauralClick, slideOutRight, slideInFromRight } from './ui/MenuScreen';
 
 const stageEl = document.getElementById('stage') as HTMLElement;
@@ -313,6 +313,7 @@ function updateCountdown() {
 
 let lastResultsFlashTime = 0;
 let lastResultsPopTime = 0;
+let lastResultsBoomTime = 0;
 
 /**
  * Which player the results celebration belongs to, or -1 for nobody.
@@ -384,15 +385,24 @@ function updateResultsEffects(game: Game, dt: number, W: number, H: number) {
 
     if (AudioStore.soundOn && !isOptionsOpen()) {
       const normX = W > 0 ? (rx / W) * 2 - 1 : 0;
-      playNote(Math.random(), normX, k === 'break' ? 'break' : k === 'bond' ? 'bond' : 'burst', 0.6);
+      if (k === 'spawn' || k === 'blocked') playRandomGameBoom(normX, 'celebration');
+      else playNote(Math.random(), normX, k === 'break' ? 'break' : 'bond', 0.6);
     }
+  }
+
+  // Booms on their own cadence, faster than the flashes and independent of them.
+  // Tying every boom to a flash capped them at the flash rate and at the half of
+  // the flash kinds that map to a boom, which is too sparse for a victory lap.
+  if (AudioStore.soundOn && !isOptionsOpen() && now - lastResultsBoomTime > 500 + Math.random() * 900) {
+    lastResultsBoomTime = now;
+    playRandomGameBoom(Math.random() * 1.6 - 0.8, 'celebration');
   }
 
   // 4. Spawn randomized celebratory pops
   if (game.pops.length < 4 && now - lastResultsPopTime > 1200 + Math.random() * 1600) {
     lastResultsPopTime = now;
     // Congratulations only. This list used to mix in the in-match event labels
-    // (BOND, BURST, LOCK, PEEL) and invented score pops (+1000, +5000), which
+    // (BOND, BOOM, LOCK, PEEL) and invented score pops (+1000, +5000), which
     // read as though something were still being scored on a board that has
     // stopped. Keep the words short — a pop is drawn centred and can spawn as
     // far left as 15% of the width, so a long one clips on a phone.

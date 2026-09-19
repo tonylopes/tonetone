@@ -99,7 +99,7 @@ export function endMatchUI(game: Game, onRestart: () => void) {
   const rows: [string, (p: any) => string][] = [
     ['total', (p: any) => '<b>' + p.score + '</b>'],
     ['connections', (p: any) => cell(p.lockPts || 0, p.locks)],
-    ['bursts', (p: any) => cell(p.burstPts || 0, p.bursts)],
+    ['booms', (p: any) => cell(p.boomPts || 0, p.booms)],
     ['knocked loose', (p: any) => cell(p.peelPts || 0, p.peels)],
   ];
 

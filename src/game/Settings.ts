@@ -19,7 +19,7 @@ export function settingsLine(): string {
     return id + '=' + (typeof v === 'number' ? +v.toFixed(3) : v);
   }).filter(Boolean);
 
-  parts.push('burstspeed=' + Math.round(PhysicsConfig.SHATTER_SPEED));
+  parts.push('boomspeed=' + Math.round(PhysicsConfig.BOOM_SPEED));
   parts.push('breakoutmax=' + Math.round(PhysicsConfig.KICKOUT_MAX));
   return parts.join(' ');
 }

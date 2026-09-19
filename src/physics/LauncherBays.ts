@@ -26,13 +26,33 @@ export function aimSpan(height: number, twoPlayer: boolean): number {
   return twoPlayer ? height * 0.40 : height * 0.80;
 }
 
-export function aimMaxReach(height: number, twoPlayer: boolean): number {
-  return Math.max(38, twoPlayer ? height / 2 - bayInset() : height - bayInset());
+/**
+ * The furthest the aim arrow may reach, in any direction it can point.
+ *
+ * Both bays sit on the vertical centre line and sweep a half-disc of 180°, so
+ * the envelope is round and the tighter of the two dimensions bounds it. A bound
+ * taken from the height alone let a sideways aim run off the left or right edge
+ * on any portrait screen, where `width / 2` is much the smaller of the two.
+ */
+export function aimMaxReach(width: number, height: number, twoPlayer: boolean): number {
+  const forward = twoPlayer ? height / 2 - bayInset() : height - bayInset();
+  const sideways = width / 2;
+  return Math.max(38, Math.min(forward, sideways));
 }
 
-export function aimReachOf(p: LauncherPlayer, height: number, twoPlayer: boolean): number {
-  const maxReach = aimMaxReach(height, twoPlayer);
-  const reach = p.strength * aimSpan(height, twoPlayer) * 1.75;
+/**
+ * How long to draw the aim arrow, growing with strength and topping out at the
+ * round limit above.
+ *
+ * The length is scaled to that limit rather than to `aimSpan`, so the arrow
+ * saturates two thirds of the way up the strength range whatever the screen
+ * shape. Scaling it to the height instead left the arrow at full length from a
+ * sixth of the range upward on a tall phone, once the width bounded the limit,
+ * which stopped it reporting power over most of the throw.
+ */
+export function aimReachOf(p: LauncherPlayer, width: number, height: number, twoPlayer: boolean): number {
+  const maxReach = aimMaxReach(width, height, twoPlayer);
+  const reach = p.strength * maxReach * 1.5;
   return Math.min(maxReach, Math.max(38, reach));
 }
 

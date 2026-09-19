@@ -9,7 +9,7 @@ import { createRenderContext, resizeRenderer } from '../../src/graphics/Renderer
 import { clearSpriteCache } from '../../src/graphics/Sprites';
 import { createGame, resetField, toCollisionState } from '../../src/game/GameState';
 import { LauncherPlayer, Ball, Group } from '../../src/physics/Types';
-import { collide, explode } from '../../src/physics/CollisionSolver';
+import { collide, boomGroup } from '../../src/physics/CollisionSolver';
 import { makeGroup } from '../../src/physics/RigidBody';
 import { playNote, playThud } from '../../src/audio/Voices';
 import { AudioStore } from '../../src/audio/SynthEngine';
@@ -52,13 +52,13 @@ describe('Bug Detection Test Suite', () => {
     });
   });
 
-  describe('Bug 4: Empty group explosion safety', () => {
-    it('handles exploding an empty group without NaN or TypeError', () => {
+  describe('Bug 4: Empty group boom safety', () => {
+    it('handles booming an empty group without NaN or TypeError', () => {
       const game = createGame();
       const state = toCollisionState(game);
       const emptyGroup = makeGroup([], 0, 0);
 
-      expect(() => explode(state, emptyGroup, 500, 0, 1, 800)).not.toThrow();
+      expect(() => boomGroup(state, emptyGroup, 500, 0, 1, 800)).not.toThrow();
       expect(state.pops.some(p => Number.isNaN(p.x) || Number.isNaN(p.y))).toBe(false);
     });
   });
@@ -87,11 +87,11 @@ describe('Bug Detection Test Suite', () => {
     });
   });
 
-  describe('Bug 8: burst thresholds left behind by a field resize', () => {
-    it('re-derives SHATTER_SPEED and KICKOUT_MAX from the stage the renderer just sized', () => {
+  describe('Bug 8: boom thresholds left behind by a field resize', () => {
+    it('re-derives BOOM_SPEED and KICKOUT_MAX from the stage the renderer just sized', () => {
       // resizeRenderer used to assign PhysicsConfig.SC straight from the stage
       // height while the derived thresholds kept whatever height the tuning
-      // panel last happened to pass, so the speed needed to burst drifted with
+      // panel last happened to pass, so the speed needed to boom drifted with
       // the screen and never updated on rotate.
       const prevWindow = (globalThis as any).window;
       const prevDocument = (globalThis as any).document;
@@ -116,9 +116,9 @@ describe('Bug Detection Test Suite', () => {
 
           const sc = Math.max(0.5, Math.min(1.8, height / 620));
           expect(PhysicsConfig.SC).toBeCloseTo(sc, 10);
-          expect(PhysicsConfig.SHATTER_SPEED).toBeCloseTo(
+          expect(PhysicsConfig.BOOM_SPEED).toBeCloseTo(
             (PhysicsConfig.THROW_MIN +
-              (PhysicsConfig.THROW_MAX - PhysicsConfig.THROW_MIN) * PhysicsConfig.BURST_AT) * sc,
+              (PhysicsConfig.THROW_MAX - PhysicsConfig.THROW_MIN) * PhysicsConfig.BOOM_AT) * sc,
             10
           );
           expect(PhysicsConfig.KICKOUT_MAX).toBeCloseTo(
@@ -212,11 +212,11 @@ describe('Bug Detection Test Suite', () => {
     });
   });
 
-  describe('Bug 12: burst debris took credit off a live ball that rolled into it', () => {
+  describe('Bug 12: boom debris took credit off a live ball that rolled into it', () => {
     it('leaves a moving live ball its own credit when it runs into resting debris', () => {
       // Debris re-credited every live ball it touched, whichever one was moving,
-      // so a ball the opponent had just thrown was handed to whoever burst the
-      // cluster the moment it crossed the wreckage. See docs/scoring.md.
+      // so a ball the opponent had just thrown was handed to whoever boomed the
+      // group the moment it crossed the wreckage. See the Scoring page in Notion.
       recalcThresholds(620);
       const state = toCollisionState(createGame());
       const debris: Ball = {

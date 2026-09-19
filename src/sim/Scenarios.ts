@@ -3,7 +3,7 @@
  *
  * A sandbox is created with an empty `players` array, so the launcher bays
  * cannot clamp or bounce anything, and every ball gets a distinct `kind`, so no
- * bond can form and no cluster can break. What remains is the impulse solver on
+ * bond can form and no group can break. What remains is the impulse solver on
  * its own, which is the only way to check it against textbook results.
  */
 import { Ball, Group } from '../physics/Types';
@@ -50,7 +50,7 @@ export function makeBall(id: number, x: number, y: number, kind = id): Ball {
 
 /**
  * Bond a set of balls into one rigid group without going through the collision
- * path, so a cluster can be built at an exact geometry.
+ * path, so a group can be built at an exact geometry.
  */
 export function weld(balls: Ball[], vx = 0, vy = 0, av = 0): Group {
   for (const a of balls) {

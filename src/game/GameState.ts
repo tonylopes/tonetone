@@ -17,13 +17,13 @@ export function makeLauncher(side: number): LauncherPlayer {
     then: null,
     reload: 0,
     destroyed: 0,
-    bursts: 0,
+    booms: 0,
     locks: 0,
     peels: 0,
     score: 0,
     best: 0,
     lockPts: 0,
-    burstPts: 0,
+    boomPts: 0,
     peelPts: 0,
   };
 }
@@ -102,7 +102,7 @@ export function startTurns(game: Game) {
   for (const p of game.players) p.reload = 0;
 }
 
-export function spawnBallCluster(game: Game, width: number, height: number) {
+export function spawnBallGroup(game: Game, width: number, height: number) {
   const R = PhysicsConfig.R;
   const spacingX = R * 2.5;
   const spacingY = spacingX * (Math.sqrt(3) / 2);
@@ -145,13 +145,13 @@ export function resetField(game: Game, width?: number, height?: number) {
     p.loaded = drawFor(p, game.players, game.twoPlayer);
     p.nextUp = drawFor(p, game.players, game.twoPlayer);
     p.then = drawFor(p, game.players, game.twoPlayer);
-    p.reload = 0; p.destroyed = 0; p.bursts = 0;
+    p.reload = 0; p.destroyed = 0; p.booms = 0;
     p.locks = 0; p.peels = 0; p.score = 0; p.best = 0;
-    p.lockPts = 0; p.burstPts = 0; p.peelPts = 0;
+    p.lockPts = 0; p.boomPts = 0; p.peelPts = 0;
   }
 
   if (width && height) {
-    spawnBallCluster(game, width, height);
+    spawnBallGroup(game, width, height);
   }
 }
 

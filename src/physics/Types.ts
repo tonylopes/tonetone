@@ -88,13 +88,13 @@ export interface LauncherPlayer {
   then: BallOnDeck | null;
   reload: number;
   destroyed: number;
-  bursts: number;
+  booms: number;
   locks: number;
   peels: number;
   score: number;
   best: number;
   lockPts: number;
-  burstPts: number;
+  boomPts: number;
   peelPts: number;
   _idleDeg?: number;
 }

@@ -30,7 +30,7 @@ export const DEFAULT_HEIGHT = 620;
  * How a launcher is driven.
  *
  * These are proxies for a player, and a weak one is worth naming rather than
- * hiding: `engine-ai` aims at the biggest cluster at a random power and never
+ * hiding: `engine-ai` aims at the biggest group at a random power and never
  * checks whether the line is clear, so in a crowded field it bleeds most of a
  * shot's speed into whatever it clips. Where the skill under test is shot
  * selection, no policy here represents it — say so instead of reporting the
@@ -77,27 +77,27 @@ export interface RunResult {
   /** Every knob's value as the run actually saw it. */
   knobs: Record<string, KnobValue>;
   players: [PlayerTotals, PlayerTotals];
-  /** Largest cluster ever burst. */
+  /** Largest group ever boomed. */
   killBig: number;
-  /** Clusters burst over the run. */
+  /** Groups boomed over the run. */
   killGroups: number;
   /** Balls destroyed over the run. */
   killBalls: number;
   /**
-   * Mean cluster size at the moment of bursting. Watch this next to
-   * `burstsPerMinute`: frequent bursts of 2 balls are not the same game as
-   * occasional bursts of 9, and the per-minute figure alone cannot tell them apart.
+   * Mean group size at the moment of booming. Watch this next to
+   * `boomsPerMinute`: frequent booms of 2 balls are not the same game as
+   * occasional booms of 9, and the per-minute figure alone cannot tell them apart.
    */
-  burstSize: number;
-  burstsPerMinute: number;
+  boomSize: number;
+  boomsPerMinute: number;
   /** Throws that left the launcher, and throws a blocked bay refused. */
   throws: number;
   blockedThrows: number;
   ballsAvg: number;
   ballsMax: number;
   ballsFinal: number;
-  clusterAvg: number;
-  clusterMax: number;
+  groupAvg: number;
+  groupMax: number;
   /** Worst invariant reading seen on any frame, and when. */
   worst: Invariants;
   worstAt: number;
@@ -194,7 +194,7 @@ export function runSim(opts: SimOptions = {}): RunResult {
     let worstAt = 0;
     const samples: Sample[] = [];
     let ballsSum = 0, ballsMax = 0;
-    let clusterSum = 0, clusterMax = 0, clusterFrames = 0;
+    let groupSum = 0, groupMax = 0, groupFrames = 0;
     let throws = 0, blockedThrows = 0;
     let halfTimeScores: [number, number] = [0, 0];
     let endedEarly = false;
@@ -240,9 +240,9 @@ export function runSim(opts: SimOptions = {}): RunResult {
       if (game.balls.length > ballsMax) ballsMax = game.balls.length;
       let frameMax = 0;
       for (const g of game.groups) if (g.members.length > frameMax) frameMax = g.members.length;
-      clusterSum += frameMax;
-      clusterFrames++;
-      if (frameMax > clusterMax) clusterMax = frameMax;
+      groupSum += frameMax;
+      groupFrames++;
+      if (frameMax > groupMax) groupMax = frameMax;
 
       if (frame % sampleEvery === 0) {
         // `inv` is this frame's reading, taken above; nothing has moved since.
@@ -273,15 +273,15 @@ export function runSim(opts: SimOptions = {}): RunResult {
       killBig: game.killBig,
       killGroups: game.killGroups,
       killBalls: game.killBalls,
-      burstSize: game.killGroups ? game.killBalls / game.killGroups : 0,
-      burstsPerMinute: game.killGroups / minutes,
+      boomSize: game.killGroups ? game.killBalls / game.killGroups : 0,
+      boomsPerMinute: game.killGroups / minutes,
       throws,
       blockedThrows,
       ballsAvg: ballsSum / Math.max(1, frame),
       ballsMax,
       ballsFinal: game.balls.length,
-      clusterAvg: clusterSum / Math.max(1, clusterFrames),
-      clusterMax,
+      groupAvg: groupSum / Math.max(1, groupFrames),
+      groupMax,
       worst,
       worstAt,
       halfTimeScores,
@@ -313,18 +313,18 @@ export const EXTRACTORS: Record<string, Extractor> = {
   score: r => r.players[0].score + r.players[1].score,
   p1score: r => r.players[0].score,
   p2score: r => r.players[1].score,
-  bursts: r => r.killGroups,
-  burstSize: r => r.burstSize,
-  burstsPerMinute: r => r.burstsPerMinute,
+  booms: r => r.killGroups,
+  boomSize: r => r.boomSize,
+  boomsPerMinute: r => r.boomsPerMinute,
   ballsDestroyed: r => r.killBalls,
-  biggestBurst: r => r.killBig,
+  biggestBoom: r => r.killBig,
   locks: r => r.players[0].locks + r.players[1].locks,
   peels: r => r.players[0].peels + r.players[1].peels,
   ballsAvg: r => r.ballsAvg,
   ballsFinal: r => r.ballsFinal,
-  clusterAvg: r => r.clusterAvg,
-  clusterMax: r => r.clusterMax,
-  bestCluster: r => Math.max(r.players[0].best, r.players[1].best),
+  groupAvg: r => r.groupAvg,
+  groupMax: r => r.groupMax,
+  bestGroup: r => Math.max(r.players[0].best, r.players[1].best),
   throws: r => r.throws,
 };
 

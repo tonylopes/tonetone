@@ -55,7 +55,7 @@ describe('sandbox isolation', () => {
     expect({ ...PhysicsConfig }).toEqual(before);
   });
 
-  it('welds a cluster at an exact geometry with no overlap', () => {
+  it('welds a group at an exact geometry with no overlap', () => {
     const balls = [0, 1, 2].map(i => makeBall(i + 1, 500 + i * 2 * PhysicsConfig.R, 500, 10 + i));
     withSandbox(balls, [], {}, sb => {
       const g = weld(balls, 0, 0);
@@ -80,7 +80,7 @@ describe('wall behaviour', () => {
     });
   });
 
-  it('keeps a spinning cluster inside the field over a long run', () => {
+  it('keeps a spinning group inside the field over a long run', () => {
     const ring = [0, 1, 2, 3].map(i => {
       const ang = (i / 4) * Math.PI * 2;
       return makeBall(i + 1, 200 + Math.cos(ang) * 2 * PhysicsConfig.R, 200 + Math.sin(ang) * 2 * PhysicsConfig.R, 10 + i);
@@ -98,7 +98,7 @@ describe('wall behaviour', () => {
         expect(b.y).toBeGreaterThanOrEqual(R - 0.05);
         expect(b.y).toBeLessThanOrEqual(400 - R + 0.05);
       }
-      // Bouncing off rails must not deform the cluster.
+      // Bouncing off rails must not deform the group.
       expect(maxDrift(before, pairwiseDistances(g))).toBeLessThan(1e-9);
     });
   });

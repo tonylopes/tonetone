@@ -5,7 +5,7 @@
  * it without parsing the output. `--json` prints machine-readable results for
  * anything that needs to be consumed rather than read.
  *
- * See docs/simulation.md for the guide.
+ * See the Simulation Harness page in Notion for the guide.
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -13,7 +13,15 @@ import {
   EXTRACTORS, Mode, PolicyName, RunResult, SimOptions,
   extract, extractorNames, runMany, runSim,
 } from '../src/sim/Harness';
-import { KNOBS, KnobValue, knobIds, parseKnobValue } from '../src/sim/Knobs';
+import {
+  KNOBS,
+  KnobValue,
+  PRESETS,
+  knobIds,
+  parseKnobValue,
+  presetIds,
+  presetKnobs,
+} from '../src/sim/Knobs';
 import { TOLERANCE, violations } from '../src/sim/Metrics';
 import { catchUp, compare, estimate } from '../src/sim/Stats';
 import { runPhysicsChecks } from '../src/sim/PhysicsChecks';
@@ -64,7 +72,7 @@ function fail(message: string): never {
   process.exit(2);
 }
 
-/** Parse `--set burst=0.6,roll=0.3` into knob values, validated against ranges. */
+/** Parse `--set boom=0.6,roll=0.3` into knob values, validated against ranges. */
 function parseSet(spec: string | boolean | undefined): Record<string, KnobValue> {
   if (!spec || spec === true) return {};
   const out: Record<string, KnobValue> = {};
@@ -83,6 +91,21 @@ function parseSet(spec: string | boolean | undefined): Record<string, KnobValue>
   return out;
 }
 
+function parsePreset(spec: string | boolean | undefined): Record<string, KnobValue> {
+  if (!spec || spec === true) return {};
+  const id = String(spec).trim();
+  if (!PRESETS[id]) fail(`Unknown preset "${id}". Known presets: ${presetIds().join(', ')}`);
+
+  // Everything the preset declares except its match length. A harness run is
+  // endless unless `match` is asked for, and handing the clock over here would
+  // quietly truncate any run longer than the preset's match: the frames after
+  // the clock expires are a frozen field, and they would dilute every per-minute
+  // figure measured over them. `--set match=180` is still there for anyone who
+  // wants the clock as well.
+  const { match: _match, ...rest } = presetKnobs(id);
+  return rest;
+}
+
 function simOptionsFrom(args: Args): SimOptions {
   const mode = String(args.flags.mode ?? 'solo') as Mode;
   if (!['solo', 'duel', 'ai', 'idle'].includes(mode)) fail(`--mode must be solo, duel, ai or idle`);
@@ -96,7 +119,10 @@ function simOptionsFrom(args: Args): SimOptions {
     seconds: num(args.flags, 'seconds', 60),
     width: num(args.flags, 'width', 380),
     height: num(args.flags, 'height', 620),
-    knobs: parseSet(args.flags.set),
+    // A preset is the same declaration the tuning panel reads, so `--preset relax`
+    // measures the game a player picking Relax gets. `--set` wins over it, which
+    // is what makes "this preset, but with one knob moved" expressible.
+    knobs: { ...parsePreset(args.flags.preset), ...parseSet(args.flags.set) },
     policies: [policy, policy],
     invariants: args.flags.invariants !== 'false',
   };
@@ -145,29 +171,29 @@ function cmdRun(args: Args): number {
       [
         ['score', r.players[0].score, r.players[1].score, r.players[0].score + r.players[1].score],
         ['locks', r.players[0].locks, r.players[1].locks, r.players[0].locks + r.players[1].locks],
-        ['bursts', r.players[0].bursts, r.players[1].bursts, r.players[0].bursts + r.players[1].bursts],
+        ['booms', r.players[0].booms, r.players[1].booms, r.players[0].booms + r.players[1].booms],
         ['peels', r.players[0].peels, r.players[1].peels, r.players[0].peels + r.players[1].peels],
-        ['best cluster', r.players[0].best, r.players[1].best, Math.max(r.players[0].best, r.players[1].best)],
+        ['best group', r.players[0].best, r.players[1].best, Math.max(r.players[0].best, r.players[1].best)],
       ]
     );
     console.log('');
     table(
       ['field', 'value'],
       [
-        ['bursts', r.killGroups],
+        ['booms', r.killGroups],
         ['balls destroyed', r.killBalls],
-        ['mean burst size', fixed(r.burstSize)],
-        ['bursts per minute', fixed(r.burstsPerMinute)],
-        ['biggest burst', r.killBig],
+        ['mean boom size', fixed(r.boomSize)],
+        ['booms per minute', fixed(r.boomsPerMinute)],
+        ['biggest boom', r.killBig],
         ['balls (avg / max / final)', `${fixed(r.ballsAvg, 1)} / ${r.ballsMax} / ${r.ballsFinal}`],
-        ['largest cluster (avg / max)', `${fixed(r.clusterAvg, 2)} / ${r.clusterMax}`],
+        ['largest group (avg / max)', `${fixed(r.groupAvg, 2)} / ${r.groupMax}`],
         ['throws (fired / blocked)', `${r.throws} / ${r.blockedThrows}`],
         ['invariants', invariantLine(r)],
       ]
     );
-    if (r.burstSize > 0 && r.burstSize < 3) {
-      console.log(`\nnote: mean burst size is ${fixed(r.burstSize)} — bursts are frequent but trivial.`);
-      console.log('      Watch this next to bursts-per-minute; the rate alone hides it.');
+    if (r.boomSize > 0 && r.boomSize < 3) {
+      console.log(`\nnote: mean boom size is ${fixed(r.boomSize)} — booms are frequent but trivial.`);
+      console.log('      Watch this next to booms-per-minute; the rate alone hides it.');
     }
   }
 
@@ -177,7 +203,7 @@ function cmdRun(args: Args): number {
 function cmdSweep(args: Args): number {
   const spec = args.positional[0];
   if (!spec || !spec.includes('=')) {
-    fail('sweep needs knob=v1,v2,v3 — for example: sweep burst=0.2,0.4,0.6');
+    fail('sweep needs knob=v1,v2,v3 — for example: sweep boom=0.2,0.4,0.6');
   }
   const id = spec.slice(0, spec.indexOf('='));
   if (!KNOBS[id]) fail(`Unknown knob "${id}". Try: npm run sim -- knobs`);
@@ -187,7 +213,7 @@ function cmdSweep(args: Args): number {
   // and printing "±0.00" under a header about 2x the error invites exactly the
   // overreading the whole harness exists to prevent.
   const runs = Math.max(2, num(args.flags, 'runs', 5));
-  const metricNames = String(args.flags.metrics ?? 'bursts,burstSize,score,ballsAvg,clusterMax')
+  const metricNames = String(args.flags.metrics ?? 'booms,boomSize,score,ballsAvg,groupMax')
     .split(',').map(s => s.trim()).filter(Boolean);
   for (const m of metricNames) if (!EXTRACTORS[m]) fail(`Unknown metric "${m}". Known: ${extractorNames().join(', ')}`);
 
@@ -234,7 +260,7 @@ function cmdCompare(args: Args): number {
   }
   const runs = Math.max(2, num(args.flags, 'runs', 20));
   const base = simOptionsFrom(args);
-  const metricNames = String(args.flags.metrics ?? 'bursts,burstSize,score,clusterMax')
+  const metricNames = String(args.flags.metrics ?? 'booms,boomSize,score,groupMax')
     .split(',').map(s => s.trim()).filter(Boolean);
   for (const m of metricNames) if (!EXTRACTORS[m]) fail(`Unknown metric "${m}". Known: ${extractorNames().join(', ')}`);
 
@@ -453,7 +479,9 @@ Common options
   --seed <n>                 Seed (default 1). Runs are exactly reproducible.
   --seconds <n>              Simulated seconds (default 60)
   --width / --height <px>    Field size (default 380x620)
-  --set a=1,b=2              Knob overrides
+  --preset normal|relax|chaos  Start from a declared preset, minus its match
+                             clock (default: normal). See --set to add it back.
+  --set a=1,b=2              Knob overrides, applied on top of --preset
   --runs <n>                 Repeats, for sweep and compare
   --metrics a,b,c            Which metrics to report
   --policy engine-ai|fixed|random|sweep
@@ -462,8 +490,9 @@ Common options
 
 Examples
   npm run sim -- run --mode ai --seconds 120
-  npm run sim -- sweep burst=0.2,0.4,0.6,0.8 --runs 10
+  npm run sim -- sweep boom=0.2,0.4,0.6,0.8 --runs 10
   npm run sim -- compare --a kickout=0.5 --b kickout=1.0 --runs 30 --mode duel
+  npm run sim -- run --preset chaos --mode duel --seconds 120
   npm run sim -- baseline check
 
 Exit codes: 0 pass, 1 measurement failed, 2 usage error.

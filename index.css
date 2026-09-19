@@ -718,10 +718,15 @@ select option {
   color: #00f7ff;
   border: 1px solid rgba(0, 247, 255, 0.35);
 }
-.sound-badge.burst-levels {
+.sound-badge.boom-levels {
   background: rgba(255, 0, 127, 0.18);
   color: #ff007f;
   border: 1px solid rgba(255, 0, 127, 0.35);
+}
+.sound-badge.bw-levels {
+  background: rgba(255, 214, 0, 0.18);
+  color: #ffd600;
+  border: 1px solid rgba(255, 214, 0, 0.35);
 }
 .sound-badge.system-ui {
   background: rgba(165, 0, 255, 0.18);

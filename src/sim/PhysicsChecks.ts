@@ -83,13 +83,13 @@ export function checkGlancing(): CheckResult[] {
 
 /**
  * A ball into a rigid group of N produces velocity changes in N:1 ratio — the
- * cluster really does behave as one body of mass N.
+ * group really does behave as one body of mass N.
  */
-export function checkClusterMass(n = 4): CheckResult[] {
+export function checkGroupMass(n = 4): CheckResult[] {
   const R = PhysicsConfig.R;
   return withSandbox([], [], {}, sb => {
     // A horizontal bar of n welded balls, struck head-on along its axis so the
-    // impact line passes through the cluster's centre of mass and induces no spin.
+    // impact line passes through the group's centre of mass and induces no spin.
     const bar = [];
     for (let i = 0; i < n; i++) bar.push(makeBall(10 + i, 700 + i * 2 * R, 500, 100 + i));
     const striker = makeBall(1, 700 - 6 * R, 500, 0);
@@ -102,13 +102,13 @@ export function checkClusterMass(n = 4): CheckResult[] {
     sb.run(0.5, 1 / 960);
 
     // Elastic collision, mass 1 into mass n: striker ends at (1-n)/(1+n) * v,
-    // cluster at 2/(1+n) * v.
+    // group at 2/(1+n) * v.
     const expectedStriker = ((1 - n) / (1 + n)) * 400;
-    const expectedCluster = (2 / (1 + n)) * 400;
+    const expectedGroup = (2 / (1 + n)) * 400;
 
     return [
-      result(`cluster mass: striker rebound off ${n}`, `mass 1 into mass ${n} rebounds at (1-n)/(1+n) of its speed`, gs.vx, expectedStriker, 1.0, 'px/s'),
-      result(`cluster mass: ${n}-ball cluster takes 2/(1+n)`, `the cluster moves off as a single body of mass ${n}`, gb.vx, expectedCluster, 1.0, 'px/s'),
+      result(`group mass: striker rebound off ${n}`, `mass 1 into mass ${n} rebounds at (1-n)/(1+n) of its speed`, gs.vx, expectedStriker, 1.0, 'px/s'),
+      result(`group mass: ${n}-ball group takes 2/(1+n)`, `the group moves off as a single body of mass ${n}`, gb.vx, expectedGroup, 1.0, 'px/s'),
     ];
   });
 }
@@ -152,7 +152,7 @@ export function checkConservation(): CheckResult[] {
   });
 }
 
-/** A spinning cluster stays rigid: its pairwise distances must not drift. */
+/** A spinning group stays rigid: its pairwise distances must not drift. */
 export function checkRigidity(): CheckResult[] {
   const R = PhysicsConfig.R;
   return withSandbox([], [], { width: 4000, height: 4000 }, sb => {
@@ -170,12 +170,12 @@ export function checkRigidity(): CheckResult[] {
     const after = pairwiseDistances(g);
 
     return [
-      result('rigidity: spinning cluster holds shape', 'welded offsets keep every pairwise distance fixed over 20s', maxDrift(before, after), 0, 1e-9, 'px'),
+      result('rigidity: spinning group holds shape', 'welded offsets keep every pairwise distance fixed over 20s', maxDrift(before, after), 0, 1e-9, 'px'),
     ];
   });
 }
 
-/** A resting cluster must never have overlap baked into its offsets. */
+/** A resting group must never have overlap baked into its offsets. */
 export function checkNoFrozenOverlap(): CheckResult[] {
   const R = PhysicsConfig.R;
   return withSandbox([], [], {}, sb => {
@@ -200,8 +200,8 @@ export function runPhysicsChecks(): CheckResult[] {
   return [
     ...checkHeadOn(),
     ...checkGlancing(),
-    ...checkClusterMass(2),
-    ...checkClusterMass(4),
+    ...checkGroupMass(2),
+    ...checkGroupMass(4),
     ...checkConservation(),
     ...checkRigidity(),
     ...checkNoFrozenOverlap(),

@@ -22,20 +22,20 @@ export const WHITE = '#FFFFFF';
 export let SPECIALS = true;
 
 // Scoring pays for what a shot changed, not for the size of whatever it touched.
-// See docs/scoring.md for the measurements behind these rules.
+// See the Scoring page in Notion for the measurements behind these rules.
 
-/** Per ball a lock adds, before the growth for the size of the cluster it joins. */
+/** Per ball a lock adds, before the growth for the size of the group it joins. */
 export const PAY_LOCK = 3;
 /** Per ball destroyed, before the size bonus. */
-export const PAY_BURST = 5;
-/** Per peel, before the growth for the size of the cluster the ball was knocked off. */
+export const PAY_BOOM = 5;
+/** Per peel, before the growth for the size of the group the ball was knocked off. */
 export const PAY_PEEL = 5;
 /** Lock multiplier when one of the two balls that touched is black. */
 export const PAY_BLACK = 2;
 /** Lock multiplier when a black ball locks onto another black ball. */
 export const PAY_BLACK_PAIR = 4;
-/** A burst of N balls pays each ball max(1, N / BURST_BONUS_FROM) times the base. */
-export const BURST_BONUS_FROM = 3;
+/** A boom of N balls pays each ball max(1, N / BOOM_BONUS_FROM) times the base. */
+export const BOOM_BONUS_FROM = 3;
 
 /**
  * Each further scoring event from the same throw pays this fraction of the one
@@ -50,9 +50,9 @@ export function setShotDecay(v: number) {
 
 /**
  * A lock pays for the balls it adds (`joined`, the smaller side of the merge),
- * and each one pays more the bigger the cluster it joins (`target`, the larger
+ * and each one pays more the bigger the group it joins (`target`, the larger
  * side): `PAY_LOCK × joined × (1 + target) / 2`. Two single balls pay 3; one
- * ball onto an 8-ball cluster pays 14.
+ * ball onto an 8-ball group pays 14.
  *
  * `blacks` is how many of the two balls that touched are black: 0, 1 or 2.
  */
@@ -62,17 +62,17 @@ export function lockPay(joined: number, blacks: number, target: number): number 
 }
 
 /**
- * A peel knocks one ball off a cluster of `size` balls (counting the ball that
- * leaves) and pays `PAY_PEEL × (1 + size) / 2`: 10 off a 3-ball cluster, 23 off
- * an 8-ball cluster. Paying more than this let random bumping outscore aimed
- * play in solo; see docs/scoring.md §11.
+ * A peel knocks one ball off a group of `size` balls (counting the ball that
+ * leaves) and pays `PAY_PEEL × (1 + size) / 2`: 10 off a 3-ball group, 23 off
+ * an 8-ball group. Paying more than this let random bumping outscore aimed
+ * play in solo; see the Scoring page in Notion, §11 Peel Growth.
  */
 export function peelPay(size: number): number {
   return Math.round(PAY_PEEL * (1 + size) / 2);
 }
 
-export function burstPay(count: number, payScale = 1): number {
-  return Math.round(PAY_BURST * count * Math.max(1, count / BURST_BONUS_FROM) * payScale);
+export function boomPay(count: number, payScale = 1): number {
+  return Math.round(PAY_BOOM * count * Math.max(1, count / BOOM_BONUS_FROM) * payScale);
 }
 
 export function setColorsCount(count: number) {
@@ -106,7 +106,8 @@ export function kindLabel(k: number): string {
  * In solo mode, the player acts as winner and loser simultaneously once score > 0.
  * Black balls go to the player ahead, at twice the weight of any single colour.
  * White balls go to the player behind, at half the weight of any single colour.
- * The reverse assignment snowballed matches: see docs/scoring.md §9.
+ * The reverse assignment snowballed matches: see the Scoring page in
+ * Notion, §9 Special Balls and Catch-Up.
  */
 export function drawFor(p?: LauncherPlayer, playersList?: LauncherPlayer[], twoPlayerMode?: boolean): BallOnDeck {
   if (SPECIALS && p) {

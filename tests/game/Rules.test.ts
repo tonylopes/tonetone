@@ -12,13 +12,13 @@ import {
   kindLabel,
   drawFor,
   PAY_LOCK,
-  PAY_BURST,
+  PAY_BOOM,
   PAY_PEEL,
   PAY_BLACK,
   PAY_BLACK_PAIR,
   SHOT_DECAY,
   lockPay,
-  burstPay,
+  boomPay,
   peelPay,
   setShotDecay,
 } from '../../src/game/Rules';
@@ -52,11 +52,11 @@ describe('Rules module', () => {
   });
 
   describe('pay table', () => {
-    it('pays a lock per ball joined, growing with the size of the cluster it joins', () => {
+    it('pays a lock per ball joined, growing with the size of the group it joins', () => {
       expect(lockPay(1, 0, 1)).toBe(PAY_LOCK);         // two single balls
-      expect(lockPay(1, 0, 3)).toBe(2 * PAY_LOCK);     // one ball onto a 3-ball cluster
-      expect(lockPay(1, 0, 9)).toBe(5 * PAY_LOCK);     // one ball onto a 9-ball cluster
-      expect(lockPay(2, 0, 5)).toBe(2 * 3 * PAY_LOCK); // two balls onto a 5-ball cluster
+      expect(lockPay(1, 0, 3)).toBe(2 * PAY_LOCK);     // one ball onto a 3-ball group
+      expect(lockPay(1, 0, 9)).toBe(5 * PAY_LOCK);     // one ball onto a 9-ball group
+      expect(lockPay(2, 0, 5)).toBe(2 * 3 * PAY_LOCK); // two balls onto a 5-ball group
     });
 
     it('doubles a lock through one black ball and quadruples black on black', () => {
@@ -66,26 +66,26 @@ describe('Rules module', () => {
       expect(lockPay(1, 2, 3)).toBe(lockPay(1, 0, 3) * PAY_BLACK_PAIR);
     });
 
-    it('pays a peel more the bigger the cluster, and always less than bursting it', () => {
+    it('pays a peel more the bigger the group, and always less than booming it', () => {
       expect(peelPay(1)).toBe(PAY_PEEL);
       expect(peelPay(3)).toBe(10);
       expect(peelPay(8)).toBe(23);
-      for (let n = 2; n <= 12; n++) expect(peelPay(n)).toBeLessThan(burstPay(n));
+      for (let n = 2; n <= 12; n++) expect(peelPay(n)).toBeLessThan(boomPay(n));
     });
 
-    it('pays small bursts per ball and larger bursts a growing per-ball bonus', () => {
-      expect(burstPay(2)).toBe(2 * PAY_BURST);
-      expect(burstPay(3)).toBe(3 * PAY_BURST);
-      expect(burstPay(6)).toBe(6 * PAY_BURST * 2);
-      expect(burstPay(6, 0.5)).toBe(6 * PAY_BURST);
+    it('pays small booms per ball and larger booms a growing per-ball bonus', () => {
+      expect(boomPay(2)).toBe(2 * PAY_BOOM);
+      expect(boomPay(3)).toBe(3 * PAY_BOOM);
+      expect(boomPay(6)).toBe(6 * PAY_BOOM * 2);
+      expect(boomPay(6, 0.5)).toBe(6 * PAY_BOOM);
     });
 
-    it('pays more to burst a cluster than it paid to build it', () => {
-      // Building used to pay the whole cluster again on every lock, so an
-      // 8-ball cluster paid 105 to build and only 40 to burst.
+    it('pays more to boom a group than it paid to build it', () => {
+      // Building used to pay the whole group again on every lock, so an
+      // 8-ball group paid 105 to build and only 40 to boom.
       let build = 0;
       for (let n = 1; n < 8; n++) build += lockPay(1, 0, n);
-      expect(burstPay(8)).toBeGreaterThan(build);
+      expect(boomPay(8)).toBeGreaterThan(build);
     });
 
     it('clamps shot decay to 0..1', () => {

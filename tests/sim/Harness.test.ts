@@ -96,7 +96,7 @@ describe('runSim determinism', () => {
   it('leaves shared config untouched after a run', () => {
     const before = { ...PhysicsConfig };
     const colorsBefore = COLORS;
-    runSim({ ...SHORT, knobs: { bounce: 0.55, colours: 6, size: 20, burst: 0.9 } });
+    runSim({ ...SHORT, knobs: { bounce: 0.55, colours: 6, size: 20, boom: 0.9 } });
     expect({ ...PhysicsConfig }).toEqual(before);
     expect(COLORS).toBe(colorsBefore);
   });
@@ -116,11 +116,11 @@ describe('runSim determinism', () => {
 
 describe('runSim behaviour', () => {
   it('applies knob overrides on top of the registry defaults', () => {
-    const r = runSim({ ...SHORT, knobs: { minburst: 5, spread: 1.25 } });
-    expect(r.knobs.minburst).toBe(5);
+    const r = runSim({ ...SHORT, knobs: { minboom: 5, spread: 1.25 } });
+    expect(r.knobs.minboom).toBe(5);
     expect(r.knobs.spread).toBe(1.25);
     // Untouched knobs keep their documented defaults.
-    expect(r.knobs.bounce).toBe(0.94);
+    expect(r.knobs.bounce).toBe(1);
   });
 
   it('throws balls in play modes and none when idle', () => {
@@ -153,7 +153,7 @@ describe('runSim behaviour', () => {
 
   it('reports metrics every extractor can read', () => {
     const r = runSim({ seconds: 30, mode: 'duel', seed: 2 });
-    for (const name of ['score', 'bursts', 'burstSize', 'clusterMax', 'throws']) {
+    for (const name of ['score', 'booms', 'boomSize', 'groupMax', 'throws']) {
       expect(Number.isFinite(extract(name)(r)), name).toBe(true);
     }
   });
