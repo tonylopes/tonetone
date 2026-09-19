@@ -2,7 +2,7 @@ import { AudioStore, BEAT, SILENCE, isOptionsOpen, loadAt_, MAX_THUDS, MAX_VOICE
 import { boomTierOf, BOOM_TIER_COUNT as RULES_BOOM_TIER_COUNT } from '../game/Rules';
 
 export const BREAK_VOICE = {
-  mul: 1, dur: 0.42, jitter: 0.10, peak: 0.30, attack: 0.010, tick: 0.10,
+  mul: 1, dur: 0.42, jitter: 0.10, peak: 0.42, attack: 0.010, tick: 0.10,
   partials: [[1, 1], [2, 0.34]] as [number, number][], open: 2600, close: 700, dry: 0.62
 };
 
@@ -315,8 +315,19 @@ const BOOM_OUTPUT = 0.26;
  *   sensitive; held at the ordinary boom's gain through the top tiers it stops
  *   reading as bigger and starts reading as harsh.
  */
-export const BOOM_VOL_RAMP = boomVolumeRamp(3, 0.40, 0.25);
-export const WHITE_BLACK_VOL_RAMP = boomVolumeRamp(2, 0.50, 0.25);
+export const BOOM_VOL_RAMP = boomVolumeRamp(3, 0.70, 0.25);
+export const WHITE_BLACK_VOL_RAMP = boomVolumeRamp(2, 0.50, 0.18);
+
+/**
+ * How much of its ramp the white-on-black boom actually asks for.
+ *
+ * Its ramp is normalised to 1.0 like the ordinary one, so this is where the gap
+ * between the two variants is set. It is lifted in pitch and carries a metal
+ * ring, both of which put energy where the ear is most sensitive, so at equal
+ * ramps it measured 4-10 dB above the ordinary boom of the same size and read as
+ * too loud. It should be the bigger event, by a couple of dB, not by ten.
+ */
+const WHITE_BLACK_TRIM = 0.71;
 
 /**
  * Tone (the scale note the dive lands on, in Hz), duration (seconds) and volume
@@ -415,7 +426,7 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, opts: BoomOpti
   // so it is shortened, and takes its level from its own ramp rather than a flat
   // multiple of this one's — the two peak at different tiers on purpose.
   const dur = props.dur * (whiteBlack ? 0.85 : 1);
-  const vol = whiteBlack ? getWhiteBlackBoomVol(boomSize) : props.vol;
+  const vol = whiteBlack ? getWhiteBlackBoomVol(boomSize) * WHITE_BLACK_TRIM : props.vol;
   // Every tier drives the compressor at the SAME level. The tier ramp and the
   // user's boom knob are applied downstream of it instead, on `trim`.
   //
