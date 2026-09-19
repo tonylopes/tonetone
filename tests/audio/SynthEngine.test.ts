@@ -1,19 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { buildScale, loadAt_, applyDrone, fadeDroneForResults, stopAllVoices, registerActiveNode, AudioStore, initAudio, wakeAudio, inKey, scaleNote, SCALES, SCALE_ROOT } from '../../src/audio/SynthEngine';
+import { SCALE_NOTES, loadAt_, applyDrone, fadeDroneForResults, stopAllVoices, registerActiveNode, AudioStore, initAudio, wakeAudio, inKey, scaleNote, SCALE_ROOT } from '../../src/audio/SynthEngine';
 
 describe('SynthEngine module', () => {
-  describe('buildScale', () => {
-    it('generates 10 frequency values across 2 octaves for scale', () => {
-      const scale = buildScale('Minor pentatonic');
-      expect(scale.length).toBe(10);
-      expect(scale[0]).toBe(110); // A2 base pitch
-      expect(scale[5]).toBe(220); // Octave
-    });
-
-    it('falls back to Minor pentatonic for unknown scale names', () => {
-      const defaultScale = buildScale('Minor pentatonic');
-      const unknownScale = buildScale('NonExistentScale');
-      expect(unknownScale).toEqual(defaultScale);
+  describe('SCALE_NOTES', () => {
+    it('holds two octaves of Hirajoshi up from A2', () => {
+      expect(SCALE_NOTES.length).toBe(10);
+      expect(SCALE_NOTES[0]).toBe(110); // A2
+      expect(SCALE_NOTES[5]).toBe(220); // the octave
+      // A B C E F: 0, 2, 3, 7 and 8 semitones above the root.
+      expect(SCALE_NOTES.slice(0, 5).map(f => Math.round(12 * Math.log2(f / 110)))).toEqual([0, 2, 3, 7, 8]);
     });
   });
 
@@ -135,28 +130,19 @@ describe('SynthEngine module', () => {
   });
 
   describe('inKey and scaleNote', () => {
-    const saved = AudioStore.scaleName;
-    afterEach(() => { AudioStore.scaleName = saved; });
-
     it('moves a pitch at most two semitones, onto a note it then leaves alone', () => {
-      for (const name of Object.keys(SCALES)) {
-        AudioStore.scaleName = name;
-        for (let f = 40; f < 5000; f *= 1.037) {
-          const k = inKey(f);
-          expect(Math.abs(12 * Math.log2(k / f)), `${name} ${f}`).toBeLessThanOrEqual(2 + 1e-9);
-          expect(inKey(k)).toBeCloseTo(k, 9);
-        }
+      for (let f = 40; f < 5000; f *= 1.037) {
+        const k = inKey(f);
+        expect(Math.abs(12 * Math.log2(k / f)), String(f)).toBeLessThanOrEqual(2 + 1e-9);
+        expect(inKey(k)).toBeCloseTo(k, 9);
       }
     });
 
     it('counts scale steps up and down from A2', () => {
-      for (const name of Object.keys(SCALES)) {
-        AudioStore.scaleName = name;
-        expect(scaleNote(0)).toBeCloseTo(SCALE_ROOT, 9);
-        expect(scaleNote(5)).toBeCloseTo(SCALE_ROOT * 2, 9);
-        expect(scaleNote(-5)).toBeCloseTo(SCALE_ROOT / 2, 9);
-        for (let d = -10; d < 15; d++) expect(scaleNote(d + 1)).toBeGreaterThan(scaleNote(d));
-      }
+      expect(scaleNote(0)).toBeCloseTo(SCALE_ROOT, 9);
+      expect(scaleNote(5)).toBeCloseTo(SCALE_ROOT * 2, 9);
+      expect(scaleNote(-5)).toBeCloseTo(SCALE_ROOT / 2, 9);
+      for (let d = -10; d < 15; d++) expect(scaleNote(d + 1)).toBeGreaterThan(scaleNote(d));
     });
   });
 });

@@ -1,5 +1,4 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { AudioStore } from '../../src/audio/SynthEngine';
 import { setupSettingsKnobs } from '../../src/ui/SettingsModal';
 import { createGame } from '../../src/game/GameState';
 import { PhysicsConfig } from '../../src/physics/Config';
@@ -137,23 +136,5 @@ describe('tuning panel preset picker', () => {
     els.get('roll')!.value = String(presetKnobs('chaos').roll);
     els.get('roll')!.fire('input');
     expect(els.get('presetv')!.textContent).toBe('');
-  });
-
-  it('applies the scale picker on change, the event every browser fires for a select', () => {
-    const els = new Map<string, FakeEl>();
-    els.set('scale', fakeEl('scale', 'select-one', 'Hirajoshi'));
-    (global as any).document = { getElementById: (id: string) => els.get(id) ?? null };
-    const prevWindow = (global as any).window;
-    (global as any).window = {}; // no AudioContext: initAudio returns quietly
-    const saved = AudioStore.scaleName;
-    try {
-      setupSettingsKnobs(() => createGame(), () => 620);
-      els.get('scale')!.value = 'Minor pentatonic';
-      els.get('scale')!.fire('change');
-      expect(AudioStore.scaleName).toBe('Minor pentatonic');
-    } finally {
-      AudioStore.scaleName = saved;
-      (global as any).window = prevWindow;
-    }
   });
 });

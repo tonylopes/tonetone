@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { playNote, playSwoosh, playKnock, getBoomProps, boomPitches, playBoom, playCountdownTick, playMagneticElectricSound, BOND_VOICE, BREAK_VOICE, SWOOSH_METAL_MODES, boomEchoSpec, getMagnetLockProps, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL, pickGameBoom, playRandomGameBoom, resetAttractBooms, getWhiteBlackBoomVol, boomVolumeRamp, BOOM_VOL_RAMP, WHITE_BLACK_VOL_RAMP, BOOM_TIER_COUNT } from '../../src/audio/Voices';
-import { AudioStore, BEAT, SCALES, SCALE_ROOT, buildScale, inKey } from '../../src/audio/SynthEngine';
+import { AudioStore, BEAT, SCALE_NOTES, SCALE_ROOT, SCALE_STEPS, inKey } from '../../src/audio/SynthEngine';
 import { clickHz, playBinauralClick, resetUiSoundsForTesting, setClickLockMs } from '../../src/audio/UiSounds';
 
 describe('Voices module', () => {
@@ -511,7 +511,7 @@ describe('Voices module', () => {
       const relRed = 0, relBlue = 2 / 6;
       playKnock(0, 0.6, relRed, relBlue);
 
-      const lockNote = (rel: number) => AudioStore.scale[Math.floor(rel * 10)] * BOND_VOICE.mul;
+      const lockNote = (rel: number) => SCALE_NOTES[Math.floor(rel * 10)] * BOND_VOICE.mul;
       expect(lockNote(relRed)).not.toBe(lockNote(relBlue));
       expect(fundamentals).toContain(lockNote(relRed) * 2);
       expect(fundamentals).toContain(lockNote(relBlue) * 2);
@@ -1068,18 +1068,10 @@ describe('Voices module', () => {
     });
   });
 
-  describe('every voice follows the scale picked in the panel', () => {
-    const SCALE_NAMES = Object.keys(SCALES);
-    const saved = { name: AudioStore.scaleName, scale: AudioStore.scale };
-    function useScale(name: string) {
-      AudioStore.scaleName = name;
-      AudioStore.scale = buildScale(name);
-    }
-    afterEach(() => { AudioStore.scaleName = saved.name; AudioStore.scale = saved.scale; });
-
-    /** Semitones from the nearest note of the current scale, in any octave. */
+  describe('every voice plays in A Hirajoshi', () => {
+    /** Semitones from the nearest note of the scale, in any octave. */
     function offKey(f: number): number {
-      const steps = [...SCALES[AudioStore.scaleName], 12];
+      const steps = [...SCALE_STEPS, 12];
       const semis = 12 * Math.log2(f / SCALE_ROOT);
       const within = semis - 12 * Math.floor(semis / 12);
       return Math.min(...steps.map(st => Math.abs(within - st)));
@@ -1136,7 +1128,6 @@ describe('Voices module', () => {
       'white ball swoosh': () => playSwoosh(0, 0.8, { ignoreOptionsGuard: true, isWhite: true }),
       'countdown tick': () => { playCountdownTick({ ignoreOptionsGuard: true }); playCountdownTick({ isGo: true, ignoreOptionsGuard: true }); },
       'UI clicks': () => {
-        setClickLockMs(0);
         for (const n of ['cancel', 'select', 'confirm'] as const) {
           resetUiSoundsForTesting(); setClickLockMs(0);
           playBinauralClick(clickHz(n), 0.16, 0, 'toggle', 1, true);
@@ -1147,60 +1138,40 @@ describe('Voices module', () => {
 
     for (const [voice, play] of Object.entries(VOICES)) {
       it(`plays only scale notes: ${voice}`, () => {
-        for (const name of SCALE_NAMES) {
-          useScale(name);
-          const pitches = oscillatorPitches(play);
-          expect(pitches.length, `${voice} in ${name}`).toBeGreaterThan(0);
-          for (const f of pitches) expect(inTune(f), `${voice} in ${name}: ${f.toFixed(2)} Hz`).toBe(true);
-        }
-      });
-
-      it(`changes when the scale does: ${voice}`, () => {
-        useScale('Hirajoshi');
-        const a = oscillatorPitches(play);
-        useScale('Minor pentatonic');
-        const b = oscillatorPitches(play);
-        expect(a).not.toEqual(b);
+        const pitches = oscillatorPitches(play);
+        expect(pitches.length, voice).toBeGreaterThan(0);
+        for (const f of pitches) expect(inTune(f), `${voice}: ${f.toFixed(2)} Hz`).toBe(true);
       });
     }
 
     it('lands the black magnet lock on scale notes, single and pair', () => {
-      for (const name of SCALE_NAMES) {
-        useScale(name);
-        for (const isPair of [false, true]) {
-          const pitches = oscillatorPitches(() => playMagneticElectricSound(0, { ignoreOptionsGuard: true, isPair }));
-          const lift = isPair ? PAIR_LIFT : 1, subLift = isPair ? PAIR_SUB_LIFT : 1;
-          // The FM modulator shapes the arc's timbre and is not a note; the
-          // carrier and the suction sub are.
-          for (const f of [2400 * lift, 450 * lift, 130 * subLift, 320 * subLift, 90 * subLift]) {
-            expect(pitches).toContain(inKey(f));
-          }
+      for (const isPair of [false, true]) {
+        const pitches = oscillatorPitches(() => playMagneticElectricSound(0, { ignoreOptionsGuard: true, isPair }));
+        const lift = isPair ? PAIR_LIFT : 1, subLift = isPair ? PAIR_SUB_LIFT : 1;
+        // The FM modulator shapes the arc's timbre and is not a note; the
+        // carrier and the suction sub are.
+        for (const f of [2400 * lift, 450 * lift, 130 * subLift, 320 * subLift, 90 * subLift]) {
+          expect(pitches).toContain(inKey(f));
         }
       }
     });
 
-    it('keeps the boom tiers distinct and rising in every scale', () => {
-      for (const name of SCALE_NAMES) {
-        useScale(name);
-        const lands = [3, 7, 12, 18, 25].map(n => boomPitches(n).land);
-        for (let i = 1; i < lands.length; i++) expect(lands[i], name).toBeGreaterThan(lands[i - 1]);
-        const lifted = [3, 7, 12, 18, 25].map(n => boomPitches(n, true).land);
-        lifted.forEach((f, i) => expect(f, name).toBeGreaterThan(lands[i]));
-      }
+    it('keeps the boom tiers distinct and rising', () => {
+      const lands = [3, 7, 12, 18, 25].map(n => boomPitches(n).land);
+      for (let i = 1; i < lands.length; i++) expect(lands[i]).toBeGreaterThan(lands[i - 1]);
+      const lifted = [3, 7, 12, 18, 25].map(n => boomPitches(n, true).land);
+      lifted.forEach((f, i) => expect(f).toBeGreaterThan(lands[i]));
     });
 
     it('plays the lock, peel and knock on the same root as everything else', () => {
       // A multiplier that is not a whole number of octaves transposes the whole
-      // voice: the bond's ×2.5 played every scale from C#.
+      // voice: the bond's ×2.5 played the scale from C#.
       for (const mul of [BOND_VOICE.mul, BREAK_VOICE.mul]) expect(Number.isInteger(Math.log2(mul)), String(mul)).toBe(true);
     });
 
-    it('keeps cancel, select and confirm distinct and rising in every scale', () => {
-      for (const name of SCALE_NAMES) {
-        useScale(name);
-        expect(clickHz('select'), name).toBeGreaterThan(clickHz('cancel'));
-        expect(clickHz('confirm'), name).toBeGreaterThan(clickHz('select'));
-      }
+    it('keeps cancel, select and confirm distinct and rising', () => {
+      expect(clickHz('select')).toBeGreaterThan(clickHz('cancel'));
+      expect(clickHz('confirm')).toBeGreaterThan(clickHz('select'));
     });
   });
 });

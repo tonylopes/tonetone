@@ -155,7 +155,6 @@ describe('knob application', () => {
     expect(() => parseKnobValue('boom', '5')).toThrow(/above its maximum/);
     expect(() => parseKnobValue('boom', '0')).toThrow(/below its minimum/);
     expect(() => parseKnobValue('boom', 'loud')).toThrow(/needs a number/);
-    expect(() => parseKnobValue('scale', 'Lydian')).toThrow(/must be one of/);
     expect(parseKnobValue('boom', '0.55')).toBe(0.55);
   });
 });

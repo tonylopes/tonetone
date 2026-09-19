@@ -14,17 +14,17 @@ import { AudioStore, BEAT, SILENCE, initAudio, isOptionsOpen, scaleNote } from '
 
 /**
  * The scale step each click plays, counted from A2 (see `scaleNote`): three in a
- * row, so they rise cancel → select → confirm in every scale. They were fixed at
- * C4, D4 and E4, which put select outside Hirajoshi, the default scale.
+ * row, rising cancel → select → confirm — B3, C4, E4. They were fixed at C4, D4
+ * and E4, which put select outside the game's scale, Hirajoshi.
  *
- * - `confirm` — confirm, unpause, start. E4 in most scales.
+ * - `confirm` — confirm, unpause, start.
  * - `cancel` — cancel, close, pause.
  * - `select` — choosing an item on the menu.
  */
 const CLICK_STEPS = { cancel: 6, select: 7, confirm: 8 } as const;
 export type ClickNote = keyof typeof CLICK_STEPS;
 
-/** The frequency a click plays in the scale picked in the panel. */
+/** The frequency a click plays. */
 export function clickHz(note: ClickNote): number {
   return scaleNote(CLICK_STEPS[note]);
 }

@@ -2,29 +2,18 @@ import { AudioStore, BEAT, initAudio, applyGain, inKey } from '../audio/SynthEng
 import { BOND_VOICE, playNote, playSwoosh, playKnock, playCountdownTick, getBoomProps, boomPitches, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
 import { clickHz, playBinauralClick } from '../audio/UiSounds';
 import { pitchOf } from '../audio/SoundEvents';
-import { relOfDegree } from '../audio/Voices';
 import { COLORS } from '../game/Rules';
 
 /** Milliseconds between the notes of a tester run. */
 const RUN_GAP_MS = 170;
 
 /**
- * Play `fn` once for each ball colour in play, a beat apart.
- *
- * One note cannot show a scale. These cards used to play a single fixed position
- * that landed on the root or on E, notes nearly every scale in the picker
- * shares, so they sounded the same whichever scale was picked.
+ * Play `fn` once for each ball colour in play, a beat apart, which is what the
+ * colour voices sound like in a match. These cards used to play one fixed
+ * position that fell on the root or on E, whatever the colours were.
  */
 function acrossColours(fn: (kind: number) => void) {
   for (let k = 0; k < COLORS; k++) setTimeout(() => fn(k), k * RUN_GAP_MS);
-}
-
-/** The scale picked in the panel, as a rising run of bond notes: its five steps and the octave. */
-export function previewScale() {
-  initAudio();
-  for (let d = 0; d <= 5; d++) {
-    setTimeout(() => playNote(relOfDegree(d), 0, 'bond', { boost: 1.0, ignoreOptionsGuard: true }), d * RUN_GAP_MS);
-  }
 }
 
 export interface SoundDef {

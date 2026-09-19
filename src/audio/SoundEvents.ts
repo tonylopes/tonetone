@@ -35,11 +35,10 @@ export function panOf(x: number, width: number): number {
  * The scale step each ball colour plays, indexed by kind: 0-4 are the five steps
  * of the scale, 5 is the root an octave up.
  *
- * The first three colours — all a default match uses — take steps 1, 3 and 5,
- * because those are where the scales differ. Colours used to take steps 1, 2 and
- * 4 of each octave, which every pentatonic in the picker shares: Hirajoshi, Major
- * pentatonic and Kumoi played identical notes, and Minor pentatonic and Whole
- * tone differed from them by one. Picking a scale did nothing audible.
+ * The first three colours — all a default match uses — take steps 1, 3 and 5:
+ * A, C and F. They were chosen while the panel still offered several scales,
+ * because those steps are where scales differ most; with Hirajoshi alone they
+ * give the default match its most characteristic notes.
  *
  * A colour's step does not depend on how many colours are in play, so adding a
  * colour never retunes the ones already on the table.

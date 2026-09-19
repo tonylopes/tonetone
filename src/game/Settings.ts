@@ -24,8 +24,6 @@ export const KNOB_IDS = Object.values(KNOBS).map(def => def.id);
  * recomputes both from the knobs and the field height, so reproducing the knobs
  * reproduces them. The one thing the line still cannot carry is that height, which
  * scales both; pass the same `--height` to reproduce a session exactly.
- *
- * Quote it when pasting: some `scale` values contain a space ("Minor pentatonic").
  */
 export function settingsLine(): string {
   const parts = KNOB_IDS.map(id => {

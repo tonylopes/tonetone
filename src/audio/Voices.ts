@@ -1,4 +1,4 @@
-import { AudioStore, BEAT, SILENCE, isOptionsOpen, loadAt_, MAX_THUDS, MAX_VOICES, triggerHaptic, inKey, scaleNote } from './SynthEngine';
+import { AudioStore, BEAT, SILENCE, isOptionsOpen, loadAt_, MAX_THUDS, MAX_VOICES, triggerHaptic, inKey, scaleNote, SCALE_NOTES } from './SynthEngine';
 import { boomTierOf, BOOM_TIER_COUNT as RULES_BOOM_TIER_COUNT } from '../game/Rules';
 
 export const BREAK_VOICE = {
@@ -261,7 +261,7 @@ export function boomVolumeRamp(peakTier: number, floor: number, falloff: number)
  * The scale step each tier's dive lands on, counted from A2 (see `scaleNote`):
  * rising a step or two a tier, near the 88 / 116 / 149 / 187 / 231 Hz the dive
  * landed on when it was fixed. Explicit steps rather than `inKey`, so no two
- * tiers can land on the same note in any scale.
+ * tiers can land on the same note: F2 A2 C3 F3 A3.
  */
 const BOOM_STEPS = [-1, 0, 2, 4, 5];
 
@@ -318,7 +318,7 @@ export function getBoomProps(boomSize: number) {
 }
 
 /**
- * The boom's pitch dive, all on notes of the current scale: it starts high, lands
+ * The boom's pitch dive, all on notes of the scale: it starts high, lands
  * on the tier's note 50ms in, and glides down to the octave below. The white-on-
  * black boom lands on the scale note nearest `WHITE_BLACK_LIFT` above.
  */
@@ -722,7 +722,7 @@ export function playNote(rel: number, xNorm: number, kind: 'bond' | 'break' | 'b
   AudioStore.cursor = t;
 
   const i = scaleDegree(rel);
-  const f = AudioStore.scale[i] * spec.mul;
+  const f = SCALE_NOTES[i] * spec.mul;
   const beat = BEAT + (i % 3) * 0.4;
   const busy = loadAt_(t);
   const duck = 1 / (1 + busy * 0.8);
@@ -1015,7 +1015,7 @@ export function playMagneticElectricSound(xNorm: number = 0, opts: MagnetLockOpt
   });
 }
 
-/** A 0..1 position to an index into the ten-note `AudioStore.scale`. */
+/** A 0..1 position to an index into the ten-note `SCALE_NOTES`. */
 export function scaleDegree(rel: number): number {
   const validRel = isNaN(rel) ? 0.5 : rel;
   return Math.max(0, Math.min(9, Math.floor(validRel * 10)));
@@ -1300,7 +1300,7 @@ const KNOCK_MODES = [
 // A ball's knock note: its colour's bond-lock scale degree, one octave up, so
 // collisions play in key with the locks and the drone.
 function knockPitch(rel: number): number {
-  return AudioStore.scale[scaleDegree(rel)] * BOND_VOICE.mul * 2;
+  return SCALE_NOTES[scaleDegree(rel)] * BOND_VOICE.mul * 2;
 }
 
 function knockEnvelope(param: AudioParam, peak: number, now: number, t: number, attack: number, decay: number) {

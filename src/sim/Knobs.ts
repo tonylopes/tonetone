@@ -15,7 +15,7 @@ import { Game } from '../game/GameState';
 import { PhysicsConfig, chainPercent, recalcThresholds } from '../physics/Config';
 import { inertiaOf } from '../physics/RigidBody';
 import { COLORS, MAX_COLORS, MIN_COLORS, SHOT_DECAY, SPECIALS, colorOfKind, setColorsCount, setShotDecay, setSpecialsToggle } from '../game/Rules';
-import { AudioStore, applyDrone, applyGain, buildScale, setLatencyHint } from '../audio/SynthEngine';
+import { AudioStore, applyDrone, applyGain, setLatencyHint } from '../audio/SynthEngine';
 import { formatClock } from '../game/Clock';
 
 export type KnobValue = number | string;
@@ -74,15 +74,6 @@ export type KnobSpec = RangeKnobSpec | SelectKnobSpec;
 
 /** A knob as the registry serves it. */
 export type KnobDef = KnobSpec & { id: string };
-
-/**
- * The scales the `scale` knob offers.
- *
- * The default is the first option: a `<select>` with no `selected` attribute
- * opens on its first entry, so the two cannot be stated separately.
- */
-const SCALE_OPTIONS = ['Hirajoshi', 'Minor pentatonic', 'Major pentatonic', 'Kumoi', 'Whole tone'] as const;
-type ScaleOption = (typeof SCALE_OPTIONS)[number];
 
 function pct(v: number): string {
   return Math.round(v * 100) + '%';
@@ -246,14 +237,6 @@ const KNOB_SPECS = {
     apply: v => { PhysicsConfig.MIN_BOOM = v; },
     format: v => (v <= 1 ? 'any' : v + '+'),
     read: () => PhysicsConfig.MIN_BOOM,
-  },
-
-  scale: {
-    group: 'audio', kind: 'select', default: 'Hirajoshi' as ScaleOption, wakesAudio: true, cosmetic: true,
-    options: SCALE_OPTIONS,
-    apply: v => { AudioStore.scaleName = v; AudioStore.scale = buildScale(v); },
-    format: () => '',
-    read: () => AudioStore.scaleName,
   },
 
   latency: {
@@ -596,7 +579,7 @@ export interface ConfigSnapshot {
   colors: number;
   specials: boolean;
   shotDecay: number;
-  audio: { volume: number; lockVol: number; breakVol: number; boomVol: number; clickVol: number; drone: number; haptics: number; latency: number; scaleName: string; scale: number[] };
+  audio: { volume: number; lockVol: number; breakVol: number; boomVol: number; clickVol: number; drone: number; haptics: number; latency: number };
 }
 
 export function snapshotConfig(): ConfigSnapshot {
@@ -609,7 +592,6 @@ export function snapshotConfig(): ConfigSnapshot {
       volume: AudioStore.volume, lockVol: AudioStore.lockVol, breakVol: AudioStore.breakVol,
       boomVol: AudioStore.boomVol, clickVol: AudioStore.clickVol, drone: AudioStore.drone,
       haptics: AudioStore.haptics, latency: AudioStore.latency,
-      scaleName: AudioStore.scaleName, scale: AudioStore.scale,
     },
   };
 }

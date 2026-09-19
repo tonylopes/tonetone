@@ -1,62 +1,50 @@
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
-export const SCALES: Record<string, number[]> = {
-  'Minor pentatonic': [0, 3, 5, 7, 10],
-  'Major pentatonic': [0, 2, 4, 7, 9],
-  'Hirajoshi': [0, 2, 3, 7, 8],
-  'Kumoi': [0, 2, 3, 7, 9],
-  'Whole tone': [0, 2, 4, 6, 8],
-};
+/**
+ * The one scale the game plays in: Hirajoshi on A, as semitones above the root.
+ *
+ * The tuning panel used to offer four others — Minor and Major pentatonic,
+ * Kumoi and Whole tone. On 2026-09-19 the difference could not be heard in play
+ * and the picker was removed, so every voice is tuned to this one.
+ */
+export const SCALE_STEPS: readonly number[] = [0, 2, 3, 7, 8];
 
-/** A2, the root every scale is built on, and the drone's pitch. */
+/** A2, the root the scale is built on, and the drone's pitch. */
 export const SCALE_ROOT = 110;
 
-export function buildScale(name: string): number[] {
-  const steps = SCALES[name] || SCALES['Minor pentatonic'];
-  const out: number[] = [];
-  for (let oct = 0; oct < 2; oct++) {
-    for (const st of steps) {
-      out.push(SCALE_ROOT * Math.pow(2, (st + 12 * oct) / 12));
-    }
-  }
-  return out;
-}
-
-/** Semitones above the root of each step of the scale picked in the panel. */
-function currentSteps(): number[] {
-  return SCALES[AudioStore.scaleName] || SCALES['Minor pentatonic'];
-}
+/** The ten notes the colour voices index into: two octaves up from A2. */
+export const SCALE_NOTES: readonly number[] = [0, 1].flatMap(oct =>
+  SCALE_STEPS.map(st => SCALE_ROOT * Math.pow(2, (st + 12 * oct) / 12)));
 
 /**
- * The note of the current scale nearest `freq`, in whatever octave `freq` is in.
+ * The note of the scale nearest `freq`, in whatever octave `freq` is in.
  *
- * This is how a voice with its own register follows the scale picker: each pitch
- * it aims at moves onto the nearest scale note, which is never more than a
- * couple of semitones away, so the voice keeps its character. Nearness is
- * measured in semitones, not Hz; a tie goes to the lower note.
+ * This is how a voice with its own register stays in key: each pitch it aims at
+ * moves onto the nearest scale note, which is never more than two semitones
+ * away, so the voice keeps its character. Nearness is measured in semitones, not
+ * Hz; a tie goes to the lower note.
  */
 export function inKey(freq: number): number {
-  const steps = currentSteps();
   const semis = 12 * Math.log2(freq / SCALE_ROOT);
   const octave = Math.floor(semis / 12);
   const within = semis - 12 * octave;
   let best = 0, gap = Infinity;
-  for (const st of [...steps, 12]) {
+  for (const st of [...SCALE_STEPS, 12]) {
     if (Math.abs(within - st) < gap) { gap = Math.abs(within - st); best = st; }
   }
   return SCALE_ROOT * Math.pow(2, (12 * octave + best) / 12);
 }
 
 /**
- * The note `degree` steps of the current scale above the root, A2; a negative
- * degree counts down. Used where several pitches must stay distinct and in
- * order whatever the scale — the boom tiers, the UI clicks — since snapping each
- * one with `inKey` could land two of them on the same note.
+ * The note `degree` steps of the scale above the root, A2; a negative degree
+ * counts down. Used where several pitches must stay distinct and in order — the
+ * boom tiers, the UI clicks — since snapping each one with `inKey` could land two
+ * of them on the same note.
  */
 export function scaleNote(degree: number): number {
-  const steps = currentSteps();
-  const octave = Math.floor(degree / steps.length);
-  const st = steps[degree - octave * steps.length];
+  const n = SCALE_STEPS.length;
+  const octave = Math.floor(degree / n);
+  const st = SCALE_STEPS[degree - octave * n];
   return SCALE_ROOT * Math.pow(2, (12 * octave + st) / 12);
 }
 
@@ -75,9 +63,6 @@ export interface AudioState {
   thudAt: number;
   swooshAt: number;
   thuds: number;
-  /** Name of the scale in `scale`, so the tuning panel can read its own value back. */
-  scaleName: string;
-  scale: number[];
   volume: number;
   lockVol: number;
   breakVol: number;
@@ -114,8 +99,6 @@ export const AudioStore: AudioState = {
   thudAt: -9,
   swooshAt: -9,
   thuds: 0,
-  scaleName: 'Hirajoshi',
-  scale: buildScale('Hirajoshi'),
   volume: 0.9,
   lockVol: 0.5,
   breakVol: 1.7,

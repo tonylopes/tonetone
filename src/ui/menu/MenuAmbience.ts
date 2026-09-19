@@ -191,7 +191,7 @@ const MENU_FLASH_R = 22;
  * routed all four through the `'hover'` branch, which clamps the frequency to
  * 261.63Hz — so bond's 330Hz was pulled down to the same note as the others and
  * the whole menu came out as one low tone. The game's voices are pitched off
- * `AudioStore.scale`, so playing them here gives the menu the tonal range a
+ * the scale (`SCALE_NOTES`), so playing them here gives the menu the tonal range a
  * match has. `rel` picks the scale degree; pass the ball's kind through where
  * there is one, exactly as the collision solver does.
  *

@@ -11,7 +11,7 @@ import { initAudio } from '../audio/SynthEngine';
  * `<output>` labels, and waking the AudioContext. What a knob actually *does*
  * lives in the registry, which the simulation harness drives by the same names.
  */
-import { previewScale, renderSoundTester, updateSoundTesterReadouts } from './SoundTester';
+import { renderSoundTester, updateSoundTesterReadouts } from './SoundTester';
 
 export function setupSettingsKnobs(
   getGame: () => Game,
@@ -59,16 +59,12 @@ export function setupSettingsKnobs(
 
     // A slider reports every step on `input`; a `<select>` reports a pick on
     // `change`, which every browser fires, where `input` on a select is not
-    // universal. Listening for `input` alone left the scale picker a no-op
-    // wherever a select does not fire it.
+    // universal.
     const pickEvent = el.type.startsWith('select') ? 'change' : 'input';
     el.addEventListener(pickEvent, () => {
       if (def.wakesAudio) initAudio();
       run();
       reportPresetState();
-      // Picking a scale changes pitches by a semitone or two, too little to hear
-      // on the next random sound; play the scale itself so the pick is heard.
-      if (def.id === 'scale') previewScale();
     });
     run();
   }
