@@ -3,7 +3,6 @@ import {
   makeLauncher,
   createGame,
   turnActive,
-  turnLength,
   startTurns,
   resetField,
   fits,

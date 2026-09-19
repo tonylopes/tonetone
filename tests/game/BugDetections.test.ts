@@ -194,7 +194,7 @@ describe('Bug Detection Test Suite', () => {
       try {
         const p: any = { side: 1, nextUp: null, then: null };
         const game: any = { showLabels: false };
-        const strip = createStrip(p, { chipNow: 'a', chipNext: 'b', strip: 'c' }, () => game);
+        const strip = createStrip(p, { chipNow: 'a', chipNext: 'b' }, () => game);
 
         p.nextUp = { kind: -1, special: 'black', color: BLACK };
         p.then = { kind: 1, special: null, color: colorOfKind(1) };
@@ -307,7 +307,7 @@ describe('Bug Detection Test Suite', () => {
         const p: any = { side: 1, nextUp: { kind: 1, special: null, color: colorOfKind(1) },
                          then: { kind: 2, special: null, color: colorOfKind(2) } };
         const game: any = { showLabels: false };
-        const strip = createStrip(p, { chipNow: 'a', chipNext: 'b', strip: 'c' }, () => game);
+        const strip = createStrip(p, { chipNow: 'a', chipNext: 'b' }, () => game);
 
         strip.refresh();
         const first = paints;

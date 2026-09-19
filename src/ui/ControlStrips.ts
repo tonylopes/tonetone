@@ -8,7 +8,6 @@ import { kindLabel } from '../game/Rules';
 export interface StripIds {
   chipNow: string;
   chipNext: string;
-  strip: string;
 }
 
 export function createStrip(

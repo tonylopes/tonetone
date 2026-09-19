@@ -55,13 +55,13 @@ window.addEventListener('pageshow', recoverGraphics);
 
 const strip1 = createStrip(
   game.players[0],
-  { chipNow: 'chipNow', chipNext: 'chipNext', strip: 'cue' },
+  { chipNow: 'chipNow', chipNext: 'chipNext' },
   () => game
 );
 
 const strip2 = createStrip(
   game.players[1],
-  { chipNow: 'chipNow2', chipNext: 'chipNext2', strip: 'cue2' },
+  { chipNow: 'chipNow2', chipNext: 'chipNext2' },
   () => game
 );
 
