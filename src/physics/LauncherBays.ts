@@ -92,6 +92,11 @@ export function launchSpeedOf(p: LauncherPlayer, twoPlayer?: boolean): number {
   return throwSpeedOf(p, twoPlayer) * PhysicsConfig.KICK;
 }
 
+/** True when the throw as aimed would boom the group it hits. */
+export function boomsOnImpact(p: LauncherPlayer, twoPlayer?: boolean): boolean {
+  return launchSpeedOf(p, twoPlayer) >= PhysicsConfig.BOOM_SPEED;
+}
+
 /**
  * How far past the boom threshold a throw is: 0 the moment it starts booming,
  * 1 at the hardest throw the bay can make, and 0 for anything that will not

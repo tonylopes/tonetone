@@ -7,7 +7,7 @@ import { AIM_HOT, BLACK_HEX, CYAN, FIELD_BG, MENU_CYAN, PINK, Rgb, VOID, WHITE, 
 import { FLASH_LIFE, POP_LIFE } from '../physics/Types';
 import { setHidden } from '../ui/Dom';
 import { popText } from './PopText';
-import { aimDirOf, aimReachOf, boomHeatOf, launchPointOf, mouthRadius } from '../physics/LauncherBays';
+import { aimDirOf, aimReachOf, boomHeatOf, boomsOnImpact, launchPointOf, mouthRadius } from '../physics/LauncherBays';
 import { LauncherPlayer } from '../physics/Types';
 import { kindLabel } from '../game/Rules';
 import { TAU } from '../math';
@@ -263,10 +263,22 @@ const MOUTH_FILL: Rgb = [12, 4, 30];
 /** Dash pattern of the aim arrow's shaft. */
 const AIM_DASH = [6, 8];
 
-/** The aim arrow's glow: its radius at the boom threshold, and how much more it
- *  gains by full power. */
+/**
+ * The aim arrow's glow, which is where the boom threshold lives.
+ *
+ * `AIM_GLOW` is the soft white halo a safe throw carries. The moment the throw
+ * would boom the halo turns red and steps up to `AIM_GLOW_HOT`, then grows by
+ * `AIM_GLOW_HEAT` more as the throw hardens, reaching 32px at full power.
+ *
+ * The step is deliberate. The shaft's colour ramp starts at white and is still
+ * `#ffe7e7` a tenth of the way up the booming range, which is what Tony asked
+ * for and which leaves the threshold itself invisible in the shaft. The glow
+ * is the channel that can carry it without making the low end red: a pale
+ * arrow inside a red halo.
+ */
 const AIM_GLOW = 10;
-const AIM_GLOW_HEAT = 22;
+const AIM_GLOW_HOT = 14;
+const AIM_GLOW_HEAT = 18;
 
 export function drawOneLauncher(rc: RenderContext, game: Game, p: LauncherPlayer, time: number) {
   const { ctx, W, H } = rc;
@@ -464,6 +476,7 @@ function drawAim(
   // `LauncherPaint` reaches this function any more: it is the same arrow for
   // both players, told apart by which bay it grows out of.
   const heat = boomHeatOf(p, game.twoPlayer);
+  const hot = boomsOnImpact(p, game.twoPlayer);
   const aimRgb = mix(WHITE, AIM_HOT, heat);
   const aimColor = rgba(aimRgb, +((0.65 + 0.35 * p.strength) * fade).toFixed(3));
 
@@ -478,13 +491,13 @@ function drawAim(
     lineWidth: 2 + p.strength * 3,
   };
 
-  // The glow is the other half of the power reading, and the half that carries
-  // it: the two reds are only ΔE 12 apart, so a hot arrow is told from a barely
-  // booming one mostly by how far it bleeds into the table.
+  // The glow says whether the throw booms; the shaft says how hard. A safe
+  // throw is white inside a white halo, and the halo goes red at the threshold,
+  // where the shaft is still all but white.
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
-  ctx.shadowColor = rgba(aimRgb, +((0.6 + 0.35 * heat) * fade).toFixed(3));
-  ctx.shadowBlur = AIM_GLOW + AIM_GLOW_HEAT * heat;
+  ctx.shadowColor = rgba(hot ? AIM_HOT : WHITE, +((hot ? 0.7 + 0.25 * heat : 0.6) * fade).toFixed(3));
+  ctx.shadowBlur = hot ? AIM_GLOW_HOT + AIM_GLOW_HEAT * heat : AIM_GLOW;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 0;
   strokeAim(ctx, g, rgba(VOID, +(0.55 * fade).toFixed(3)), 1.5);

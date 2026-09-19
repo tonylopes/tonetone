@@ -113,6 +113,8 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
   function recordingContext() {
     const strokeStyles: string[] = [];
     const lineWidths: number[] = [];
+    const shadowColors: string[] = [];
+    const shadowBlurs: number[] = [];
     const ctx = {
       save: vi.fn(),
       restore: vi.fn(),
@@ -148,8 +150,24 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
         this._lineWidth = val;
         lineWidths.push(val);
       },
+      _shadowColor: '',
+      _shadowBlur: 0,
+      get shadowColor() {
+        return this._shadowColor;
+      },
+      set shadowColor(val: string) {
+        this._shadowColor = val;
+        shadowColors.push(val);
+      },
+      get shadowBlur() {
+        return this._shadowBlur;
+      },
+      set shadowBlur(val: number) {
+        this._shadowBlur = val;
+        shadowBlurs.push(val);
+      },
     } as unknown as CanvasRenderingContext2D;
-    return { ctx, strokeStyles, lineWidths };
+    return { ctx, strokeStyles, lineWidths, shadowColors, shadowBlurs };
   }
 
   /**
@@ -159,7 +177,7 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
    * then the two head strokes — which follow the wider outline pass underneath.
    */
   function drawArrow(strength: number, playerIndex = 0) {
-    const { ctx, strokeStyles, lineWidths } = recordingContext();
+    const { ctx, strokeStyles, lineWidths, shadowColors, shadowBlurs } = recordingContext();
     const rc: RenderContext = {
       cv: {} as any,
       ctx,
@@ -180,6 +198,10 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
       head: strokeStyles[strokeStyles.length - 1],
       all: strokeStyles,
       width: lineWidths[lineWidths.length - 1],
+      // The aim arrow is the last thing a launcher draws, so the last shadow
+      // set on the context is its glow.
+      glow: shadowColors[shadowColors.length - 1],
+      glowBlur: shadowBlurs[shadowBlurs.length - 1],
     };
   }
 
@@ -240,6 +262,30 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
     }
     expect(drawArrow(0.6, 1).shaft).not.toContain(rgba(PINK, 0).slice(0, -2));
     expect(drawArrow(0.2, 0).shaft).not.toContain(rgba(CYAN, 0).slice(0, -2));
+  });
+
+  it('glows white while the throw is safe and red the moment it would boom', () => {
+    // The shaft cannot carry the threshold: it is still #ffe7e7 a tenth of the
+    // way up the booming range, by design. The glow carries it instead.
+    const whitePrefix = rgba(WHITE, 0).slice(0, -2);
+    const hotPrefix = rgba(AIM_HOT, 0).slice(0, -2);
+
+    for (const strength of [0, 0.2]) {
+      expect(drawArrow(strength).glow, 'strength ' + strength).toContain(whitePrefix);
+    }
+    for (const strength of [0.4, 0.7, 1]) {
+      expect(drawArrow(strength).glow, 'strength ' + strength).toContain(hotPrefix);
+    }
+  });
+
+  it('grows the glow across the booming range, and steps it up at the threshold', () => {
+    const safe = drawArrow(0.2).glowBlur;
+    const justBooming = drawArrow(0.4).glowBlur;
+    const full = drawArrow(1).glowBlur;
+
+    expect(justBooming).toBeGreaterThan(safe);
+    expect(full).toBeGreaterThan(justBooming);
+    expect(full).toBeCloseTo(32); // AIM_GLOW_HOT + AIM_GLOW_HEAT
   });
 
   it('scales the arrow head width with strength', () => {

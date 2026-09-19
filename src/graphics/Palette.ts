@@ -101,12 +101,13 @@ export const FIELD_BG: Rgb = [0x14, 0x0a, 0x2b];
  *    moment it booked, to mark the threshold — and that made the low end of
  *    the booming range far too red. Tony: "it should be whiter near 0.4".
  *
- * So the snap is gone and the ramp starts at white. **The cost is that the boom
- * threshold is no longer legible in the colour** — at strength 0.30 the arrow is
- * 99% white, where the old pink switch made that moment unmistakable. If it has
- * to come back, the glow is the free channel: `drawAim` already grows it with
- * the same heat, and it could start at the threshold instead of rising from the
- * arrow's base glow.
+ * So the snap is gone and the ramp starts at white — which leaves the boom
+ * threshold invisible in the shaft, since at strength 0.30 the arrow is 99%
+ * white where the old pink switch made that moment unmistakable. **The glow
+ * carries it instead**: `drawAim` paints a white halo while the throw is safe
+ * and a red one the moment it would boom, growing from 14px to 32px as the
+ * throw hardens. Shaft for how hard, halo for whether — two channels, so
+ * neither has to be read against the other.
  *
  * Red belongs to nothing else on the table: this is CIEDE2000 39.2 from `PINK`,
  * 63.7 from `CYAN`, and 39.0 from its nearest ball, the gold.
