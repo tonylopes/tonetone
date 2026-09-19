@@ -8,6 +8,7 @@ import {
 } from '../../src/sim/Knobs';
 import { createGame } from '../../src/game/GameState';
 import { PhysicsConfig } from '../../src/physics/Config';
+import { AudioStore } from '../../src/audio/SynthEngine';
 
 /**
  * Parse the `<input>`/`<select>` attributes out of index.html.
@@ -229,5 +230,59 @@ describe('preset controls', () => {
 
   it('rejects an unknown preset rather than silently falling back', () => {
     expect(() => applyPreset('nonesuch', { game: createGame(), height: 620 })).toThrow(/Unknown preset/);
+  });
+});
+
+/**
+ * The module literals must agree with the knob defaults.
+ *
+ * `PhysicsConfig`, `AudioStore` and a new `Game` all carry authored literals for
+ * fields a knob controls, and both the tuning panel and the harness overwrite
+ * them at start-up. That makes a stale literal invisible in play but misleading
+ * to read: PR #2 moved four knob defaults and no literal followed, so the source
+ * said `DRAG: 0.45` where the game shipped 0.59.
+ *
+ * This is the same guard `index.html` already gets above: one declaration point
+ * for a knob, and a test that fails when a second copy disagrees. Fields derived
+ * from others by `recalcThresholds` are excluded, since they are computed rather
+ * than authored.
+ */
+describe('knob defaults match the module literals', () => {
+  /** Recomputed by `recalcThresholds` from other fields, so not authored. */
+  const DERIVED = new Set(['BOOM_SPEED', 'KICKOUT_MAX', 'THROW_MIN', 'THROW_MAX', 'SC']);
+
+  it('leaves no field whose literal disagrees with its knob default', () => {
+    const game = createGame();
+    const literalPhys: Record<string, unknown> = { ...PhysicsConfig };
+    const literalAudio: Record<string, unknown> = { ...AudioStore };
+    const literalMatchLen = game.matchLen;
+
+    const snap = snapshotConfig();
+    try {
+      applyKnobDefaults({ game, height: 620 });
+
+      const drift: string[] = [];
+      for (const [k, was] of Object.entries(literalPhys)) {
+        if (DERIVED.has(k)) continue;
+        const now = (PhysicsConfig as Record<string, unknown>)[k];
+        if (typeof was === 'number' && typeof now === 'number' && Math.abs(was - now) > 1e-9) {
+          drift.push(`PhysicsConfig.${k}: literal ${was}, knob default ${now}`);
+        }
+      }
+      for (const k of ['vol', 'lockVol', 'breakVol', 'boomVol', 'clickVol', 'droneVol']) {
+        const was = literalAudio[k];
+        const now = (AudioStore as Record<string, unknown>)[k];
+        if (typeof was === 'number' && typeof now === 'number' && Math.abs(was - now) > 1e-9) {
+          drift.push(`AudioStore.${k}: literal ${was}, knob default ${now}`);
+        }
+      }
+      if (Math.abs(literalMatchLen - game.matchLen) > 1e-9) {
+        drift.push(`Game.matchLen: literal ${literalMatchLen}, knob default ${game.matchLen}`);
+      }
+
+      expect(drift, 'update the literal, or the knob default, so they agree').toEqual([]);
+    } finally {
+      restoreConfig(snap);
+    }
   });
 });

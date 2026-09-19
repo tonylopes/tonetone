@@ -1,4 +1,5 @@
-import { BallOnDeck, LauncherPlayer, SpecialBallType } from '../physics/Types';
+import { BallOnDeck, Group, LauncherPlayer, SpecialBallType } from '../physics/Types';
+import { PhysicsConfig } from '../physics/Config';
 
 export const BALL_COLORS = [
   '#FDBE4E', // Gold / Warm Yellow
@@ -73,6 +74,62 @@ export function peelPay(size: number): number {
 
 export function boomPay(count: number, payScale = 1): number {
   return Math.round(PAY_BOOM * count * Math.max(1, count / BOOM_BONUS_FROM) * payScale);
+}
+
+/**
+ * The player id that means "nobody is paid for this".
+ *
+ * `award` already declines any id that isn't a real player, so this is a name for
+ * an existing rule rather than a new one. It was the bare literal -1 in three
+ * places and an omitted argument in a fourth, which read as an oversight instead
+ * of a decision.
+ */
+export const NO_CREDIT = -1;
+
+/**
+ * Does a hit of `impact` on `group` blow the whole group up, rather than peel a
+ * single ball off it?
+ *
+ * The solver decides this in two different branches — a ball breaking out of a
+ * group, and a ghost ball striking a real one — and the two had the same pair of
+ * comparisons written out separately. A rule change would have landed in one and
+ * not the other, so the test lives here, once.
+ */
+export function boomsOn(impact: number, group: Group): boolean {
+  return impact >= PhysicsConfig.BOOM_SPEED && group.members.length >= PhysicsConfig.MIN_BOOM;
+}
+
+/**
+ * The boom-size tiers, smallest threshold first: how many balls a boom has to
+ * take to earn each word.
+ *
+ * One table serves both the word on the pop and the voice the boom is
+ * synthesized with. These were two tables — `BOOM_LABEL_TIERS` in the solver and
+ * an if-ladder in the boom voice — kept in step only by a comment saying they
+ * matched. Moving a threshold in one and not the other would have put a MEGA
+ * word on a SUPER sound.
+ */
+export const BOOM_TIERS: readonly { readonly min: number; readonly word: string }[] = [
+  { min: 5, word: 'DOUBLE' },
+  { min: 10, word: 'SUPER' },
+  { min: 15, word: 'MEGA' },
+  { min: 20, word: 'GIGA' },
+];
+
+/** Tier count including tier 0, the boom too small to earn a word. */
+export const BOOM_TIER_COUNT = BOOM_TIERS.length + 1;
+
+/** Which tier a boom of `count` balls falls in: 0 (smallest) up to `BOOM_TIERS.length`. */
+export function boomTierOf(count: number): number {
+  let tier = 0;
+  for (let i = 0; i < BOOM_TIERS.length; i++) if (count >= BOOM_TIERS[i].min) tier = i + 1;
+  return tier;
+}
+
+/** The word a boom of `count` balls earns, or '' when it is below the first tier. */
+export function boomTierWord(count: number): string {
+  const tier = boomTierOf(count);
+  return tier === 0 ? '' : BOOM_TIERS[tier - 1].word;
 }
 
 export function setColorsCount(count: number) {

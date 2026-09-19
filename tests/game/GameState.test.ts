@@ -3,7 +3,6 @@ import {
   makeLauncher,
   createGame,
   turnActive,
-  turnLength,
   startTurns,
   resetField,
   fits,
@@ -39,7 +38,7 @@ describe('GameState module', () => {
       expect(game.players.length).toBe(2);
       expect(game.balls).toEqual([]);
       expect(game.groups).toEqual([]);
-      expect(game.matchLen).toBe(180);
+      expect(game.matchLen).toBe(120); // the `match` knob default; see the drift guard in Knobs.test.ts
       expect(game.matchRunning).toBe(false);
       expect(game.paused).toBe(false);
       expect(game.rainInterval).toBe(0);

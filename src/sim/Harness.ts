@@ -6,7 +6,7 @@
  * function the browser build's game loop calls — so it always measures the
  * shipping simulation rather than a copy of it.
  */
-import { Game, createGame, resetField, startTurns } from '../game/GameState';
+import { Game, createGame, resetField, startMatch } from '../game/GameState';
 import { LauncherPlayer } from '../physics/Types';
 import { recalcThresholds } from '../physics/Config';
 import { aiAim } from '../game/AI';
@@ -177,8 +177,10 @@ export function runSim(opts: SimOptions = {}): RunResult {
     recalcThresholds(height);
 
     resetField(game, width, height);
-    startTurns(game);
-    game.matchRunning = true;
+    // Countdown 0: the harness fires on the first frame. The browser holds fire for
+    // one reload instead, so a measured match is very slightly longer than a played
+    // one at the same `seconds`. Unmeasured; see the Simulation Harness page.
+    startMatch(game, 0);
     // `idle` never fires a throw: lock all reload timers at Infinity so the
     // launcher bays never become ready. (game.turnT was removed in the
     // simultaneous-play refactor; this is the current equivalent guard.)

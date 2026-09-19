@@ -15,7 +15,6 @@ import { renderSoundTester, updateSoundTesterReadouts } from './SoundTester';
 
 export function setupSettingsKnobs(
   getGame: () => Game,
-  resizeFn: () => void,
   getHeight: () => number = () => window.innerHeight
 ) {
   // Render Sound FX Tester list in the options panel container if present

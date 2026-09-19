@@ -1,16 +1,16 @@
-import { Ball, Flash, Group, LauncherPlayer, Pop, Shot } from './Types';
+import { Ball, FLASH_LIFE, Flash, Group, LauncherPlayer, POP_LIFE, Pop, Shot, SoundEvent } from './Types';
 import { PhysicsConfig } from './Config';
 import { rebuildGroups, separateGroups, shiftGroup, syncGroup } from './RigidBody';
 import { clearExempt, mouthClamp, mouthCollide } from './LauncherBays';
-import { SHOT_DECAY, boomPay, lockPay, peelPay } from '../game/Rules';
-import { playNote, playKnock, playMagneticElectricSound } from '../audio/Voices';
-import { AudioStore } from '../audio/SynthEngine';
+import { NO_CREDIT, SHOT_DECAY, boomPay, boomTierWord, boomsOn, lockPay, peelPay } from '../game/Rules';
 
 export interface CollisionState {
   balls: Ball[];
   groups: Group[];
   flashes: Flash[];
   pops: Pop[];
+  /** Sounds this frame earned, drained by the frame loop after the last substep. */
+  sounds: SoundEvent[];
   byId: Map<number, Ball>;
   lastHit: Map<string, number>;
   players: LauncherPlayer[];
@@ -71,20 +71,6 @@ export function forEachPair(balls: Ball[], fn: (a: Ball, b: Ball) => void) {
 }
 
 /**
- * How big a boom has to be to earn each word, largest first.
- *
- * The thresholds are the same five tiers the boom voice is synthesized in
- * (`getBoomProps`), so the word on screen and the sound in the speakers
- * step up together. A boom under 5 balls earns no word.
- */
-export const BOOM_LABEL_TIERS: readonly (readonly [number, string])[] = [
-  [20, 'GIGA'],
-  [15, 'MEGA'],
-  [10, 'SUPER'],
-  [5, 'DOUBLE'],
-];
-
-/**
  * The word beside a boom's points: a size tier, and BOOM! for a white-on-black hit.
  *
  * BOOM! is reserved for the white-on-black hit — the only way a black ball ever
@@ -94,9 +80,9 @@ export const BOOM_LABEL_TIERS: readonly (readonly [number, string])[] = [
  * white-on-black hit that takes 12 balls with it reads `+96 SUPER BOOM!`.
  */
 export function boomLabel(count: number, whiteBlack: boolean): string {
-  const tier = BOOM_LABEL_TIERS.find(([min]) => count >= min);
   const words = [];
-  if (tier) words.push(tier[1]);
+  const tierWord = boomTierWord(count);
+  if (tierWord) words.push(tierWord);
   if (whiteBlack) words.push('BOOM!');
   return words.join(' ');
 }
@@ -136,7 +122,18 @@ export function award(state: CollisionState, who: number, points: number, x: num
   if (state.pops.length > 40) state.pops.shift();
 }
 
-export function boomGroup(state: CollisionState, g: Group, impact: number, credit?: number, payScale?: number, width?: number, isWhiteHit: boolean = false, shot?: Shot) {
+/** Everything but the group and the impact that a boom needs. */
+export interface BoomOptions {
+  /** Player to pay, or `NO_CREDIT`/omitted for nobody. */
+  credit?: number;
+  /** A white ball striking a black one: the only boom that destroys a black ball. */
+  isWhiteHit?: boolean;
+  /** The throw this boom traces back to, so SHOT_DECAY can be applied. */
+  shot?: Shot;
+}
+
+export function boomGroup(state: CollisionState, g: Group, impact: number, opts: BoomOptions = {}) {
+  const { credit, isWhiteHit = false, shot } = opts;
   const members = g.members.slice();
   if (!members.length) return;
 
@@ -154,7 +151,7 @@ export function boomGroup(state: CollisionState, g: Group, impact: number, credi
   state.killBalls += destroyedMembers.length;
   if (destroyedMembers.length > state.killBig) state.killBig = destroyedMembers.length;
 
-  const who = credit === undefined ? -1 : credit;
+  const who = credit === undefined ? NO_CREDIT : credit;
   const count = destroyedMembers.length;
   if (state.players[who]) {
     state.players[who].destroyed += count;
@@ -163,7 +160,7 @@ export function boomGroup(state: CollisionState, g: Group, impact: number, credi
 
   let ax = 0, ay = 0;
   for (const b of destroyedMembers) { ax += b.x; ay += b.y; }
-  award(state, who, boomPay(count, payScale === undefined ? 1 : payScale), ax / count, ay / count, 'boom', shot, { count, whiteBlack });
+  award(state, who, boomPay(count), ax / count, ay / count, 'boom', shot, { count, whiteBlack });
 
   for (const b of destroyedMembers) {
     for (const id of b.bonds) {
@@ -190,16 +187,7 @@ export function boomGroup(state: CollisionState, g: Group, impact: number, credi
   // `ax` and `count` above are this same centroid sum over this same array.
   const n = count;
   const voice = destroyedMembers.find(m => !m.special) || destroyedMembers[0];
-  const w = width || 600;
-  playNote(
-    voice.kind < 0 ? 0.5 : voice.kind / 6,
-    w ? (ax / n / w) * 2 - 1 : 0,
-    'boom',
-    Math.min(1.6, 0.7 + n * 0.09),
-    n,
-    false,
-    whiteBlack
-  );
+  state.sounds.push({ type: 'boom', x: ax / n, kind: voice.kind, size: n, whiteBlack });
 
   for (const b of destroyedMembers) {
     const dir = Math.random() * Math.PI * 2;
@@ -215,8 +203,17 @@ export function boomGroup(state: CollisionState, g: Group, impact: number, credi
   }
 }
 
-export function detach(state: CollisionState, b: Ball, impact?: number, credit?: number, width?: number, shot?: Shot) {
-  const c = credit !== undefined ? credit : -1;
+/** Everything but the ball and the impact that a peel needs. */
+export interface PeelOptions {
+  /** Player to pay, or `NO_CREDIT`/omitted for nobody. */
+  credit?: number;
+  /** The throw this peel traces back to, so SHOT_DECAY can be applied. */
+  shot?: Shot;
+}
+
+export function detach(state: CollisionState, b: Ball, impact?: number, opts: PeelOptions = {}) {
+  const { credit, shot } = opts;
+  const c = credit !== undefined ? credit : NO_CREDIT;
   if (state.players[c]) state.players[c].peels++;
   award(state, c, peelPay(b.group.members.length), b.x, b.y, 'peel', shot);
 
@@ -236,8 +233,7 @@ export function detach(state: CollisionState, b: Ball, impact?: number, credit?:
   b.group.vy = Math.sin(dir) * speed;
 
   state.flashes.push({ x: b.x, y: b.y, t: 0, kind: 'break' });
-  const w = width || 600;
-  playNote(b.kind < 0 ? 0.5 : b.kind / 6, w ? (b.x / w) * 2 - 1 : 0, 'break');
+  state.sounds.push({ type: 'peel', x: b.x, kind: b.kind });
 }
 
 export function ageGhosts(state: CollisionState, dt: number) {
@@ -307,13 +303,20 @@ export function resolveWalls(g: Group, width: number, height: number) {
   }
 }
 
-export function collide(state: CollisionState, now: number, width: number) {
+/**
+ * Classify every contact this step, then resolve each list in a fixed order.
+ *
+ * No longer takes a width: the only thing it needed one for was the stereo pan of
+ * the sounds it used to play, and sounds are now recorded on `state.sounds` in
+ * world coordinates for the frame loop to drain.
+ */
+export function collide(state: CollisionState, now: number) {
   const R = PhysicsConfig.R;
   const bonds: { a: Ball; b: Ball; credit: number; shot?: Shot }[] = [];
   const breaks: { ball: Ball; impact: number; credit: number; shot?: Shot }[] = [];
   const ghostHits: { gh: Ball; real: Ball; impact: number }[] = [];
   const whiteHits: { w: Ball; other: Ball; impact: number }[] = [];
-  const knocks: { x: number; force: number; relHitter: number; relStruck: number }[] = [];
+  const knocks: { x: number; force: number; hitterKind: number; struckKind: number }[] = [];
 
   forEachPair(state.balls, (a, b) => {
     if (a.group === b.group) return;
@@ -391,13 +394,15 @@ export function collide(state: CollisionState, now: number, width: number) {
     } else {
       knocks.push({
         x: (a.x + b.x) / 2, force: -rvn,
-        relHitter: hitter.kind < 0 ? 0.5 : hitter.kind / 6,
-        relStruck: struck.kind < 0 ? 0.5 : struck.kind / 6,
+        hitterKind: hitter.kind,
+        struckKind: struck.kind,
       });
     }
   });
 
-  for (const k of knocks) playKnock(width ? (k.x / width) * 2 - 1 : 0, Math.min(1, k.force / 380), k.relHitter, k.relStruck);
+  for (const k of knocks) {
+    state.sounds.push({ type: 'knock', x: k.x, force: k.force, hitterKind: k.hitterKind, struckKind: k.struckKind });
+  }
 
   for (const bond of bonds) {
     const a = bond.a, b = bond.b;
@@ -417,9 +422,9 @@ export function collide(state: CollisionState, now: number, width: number) {
     // is scaled by what it produced, not by either side going into it.
     const size = a.group.members.length;
     if (viaBlack) {
-      playMagneticElectricSound(width ? (mx / width) * 2 - 1 : 0, false, blacks >= 2, size);
+      state.sounds.push({ type: 'magnetLock', x: mx, size, bothBlack: blacks >= 2 });
     } else {
-      playNote(a.kind < 0 ? 0.5 : a.kind / 6, width ? (mx / width) * 2 - 1 : 0, 'bond');
+      state.sounds.push({ type: 'lock', x: mx, kind: a.kind });
     }
     if (state.players[bond.credit]) {
       state.players[bond.credit].locks++;
@@ -431,16 +436,16 @@ export function collide(state: CollisionState, now: number, width: number) {
   for (const hit of breaks) {
     if (!hit.ball.bonds.size) continue;
     if (hit.ball.special === 'black') continue;
-    if (hit.impact >= PhysicsConfig.BOOM_SPEED && hit.ball.group.members.length >= PhysicsConfig.MIN_BOOM)
-      boomGroup(state, hit.ball.group, hit.impact, hit.credit, 1, width, false, hit.shot);
-    else detach(state, hit.ball, hit.impact, hit.credit, width, hit.shot);
+    if (boomsOn(hit.impact, hit.ball.group))
+      boomGroup(state, hit.ball.group, hit.impact, { credit: hit.credit, shot: hit.shot });
+    else detach(state, hit.ball, hit.impact, { credit: hit.credit, shot: hit.shot });
   }
 
   for (const h of whiteHits) {
     if (!state.byId.has(h.w.id) || !h.w.special) continue;
     const target = h.other.group;
     if (target && target.members.length && !h.other.ghost) {
-      boomGroup(state, target, Math.max(PhysicsConfig.BOOM_SPEED * 1.2, h.impact), h.w.credit, 1, width, true, h.w.shot);
+      boomGroup(state, target, Math.max(PhysicsConfig.BOOM_SPEED * 1.2, h.impact), { credit: h.w.credit, isWhiteHit: true, shot: h.w.shot });
     }
     h.w.special = null;
     h.w.ghost = true;
@@ -458,9 +463,12 @@ export function collide(state: CollisionState, now: number, width: number) {
       state.flashes.push({ x: h.gh.x, y: h.gh.y, t: 0, kind: 'spawn' });
       if (h.gh.pure || (h.gh.kind !== h.real.kind && h.real.bonds.size)) {
         if (h.real.special === 'black' && !h.gh.pure) continue;
-        if (h.gh.pure || (h.impact >= PhysicsConfig.BOOM_SPEED && h.real.group.members.length >= PhysicsConfig.MIN_BOOM))
-          boomGroup(state, h.real.group, Math.max(PhysicsConfig.BOOM_SPEED, h.impact), h.gh.credit, 1, width, h.gh.pure, h.gh.shot);
-        else detach(state, h.real, h.impact, undefined, width);
+        if (h.gh.pure || boomsOn(h.impact, h.real.group))
+          boomGroup(state, h.real.group, Math.max(PhysicsConfig.BOOM_SPEED, h.impact), { credit: h.gh.credit, isWhiteHit: h.gh.pure, shot: h.gh.shot });
+        // A peel caused by debris pays nobody: `credit` is left out on purpose.
+        // Only a thrown ball earns, so the chain reaction it started cannot keep
+        // paying after it. See Scoring §1 in Notion.
+        else detach(state, h.real, h.impact, { credit: NO_CREDIT });
       }
     }
     for (const g of spent) state.byId.delete(g.id);
@@ -570,7 +578,7 @@ export function stepPhysics(state: CollisionState, dt: number, now: number, widt
     resolveWalls(g, width, height);
     mouthCollide(g, state.players, width, height);
   }
-  collide(state, now, width);
+  collide(state, now);
   relax(state, 24, width, height);
   for (const b of state.balls) {
     if (b.rainTime && b.rainTime > 0) {
@@ -581,7 +589,7 @@ export function stepPhysics(state: CollisionState, dt: number, now: number, widt
   ageGhosts(state, dt);
   clearExempt(state.balls, state.players, dt, width, height);
   for (const f of state.pops) f.t += dt;
-  if (state.pops.length) state.pops = state.pops.filter(f => f.t < 1.1);
+  if (state.pops.length) state.pops = state.pops.filter(f => f.t < POP_LIFE);
   for (const f of state.flashes) f.t += dt;
-  state.flashes = state.flashes.filter(f => f.t < 0.85);
+  state.flashes = state.flashes.filter(f => f.t < FLASH_LIFE);
 }

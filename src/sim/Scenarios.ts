@@ -106,6 +106,7 @@ export function withSandbox<T>(
       groups,
       flashes: [],
       pops: [],
+      sounds: [],
       byId,
       lastHit: new Map(),
       // No launchers: the bays cannot interfere with an isolated measurement.

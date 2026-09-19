@@ -8,18 +8,15 @@ import { kindLabel } from '../game/Rules';
 export interface StripIds {
   chipNow: string;
   chipNext: string;
-  strip: string;
 }
 
 export function createStrip(
   p: LauncherPlayer,
   ids: StripIds,
-  flip: boolean,
   getGame: () => Game
 ) {
   const chipNow = document.getElementById(ids.chipNow) as HTMLCanvasElement;
   const chipNext = document.getElementById(ids.chipNext) as HTMLCanvasElement;
-  const stripEl = document.getElementById(ids.strip)!;
 
   function paintChip(cv2: HTMLCanvasElement, ball: any) {
     if (!cv2) return;

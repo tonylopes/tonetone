@@ -18,6 +18,7 @@ import {
   toCollisionState,
 } from '../game/GameState';
 import { aiAim } from '../game/AI';
+import { playSoundEvents } from '../audio/SoundEvents';
 
 /** Frames longer than this are treated as a hitch and replaced by FALLBACK_DT. */
 export const MAX_FRAME_DT = 0.05;
@@ -104,6 +105,10 @@ export function advanceFrame(
       clock += h;
       stepPhysics(colState, h, clock, width, height);
     }
+    // Once per frame, not once per substep: the solver records the sounds it earned
+    // and this is the only place they are played. Keeping it here rather than inside
+    // the substep loop means a group that booms is heard once.
+    playSoundEvents(colState.sounds, width);
   } else {
     clock += dt;
   }

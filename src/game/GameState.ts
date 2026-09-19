@@ -4,6 +4,7 @@ import { drawFor, randomKind, colorOfKind, BLACK, WHITE } from './Rules';
 import { rebuildGroups } from '../physics/RigidBody';
 import { aimDirOf, launchPointOf, throwSpeedOf } from '../physics/LauncherBays';
 import { playThud } from '../audio/Voices';
+import { panOf } from '../audio/SoundEvents';
 import { CollisionState } from '../physics/CollisionSolver';
 import { stopAllVoices } from '../audio/SynthEngine';
 
@@ -78,7 +79,7 @@ export function createGame(): Game {
     aiOn: false,
     showLabels: false,
     showStats: false,
-    matchLen: 180,
+    matchLen: 120,
     matchT: 0,
     matchRunning: false,
     matchOver: false,
@@ -100,6 +101,26 @@ export function turnActive(_game: Game, _p: LauncherPlayer): boolean {
 /** Reset all reload timers so both launchers can fire immediately at match start. */
 export function startTurns(game: Game) {
   for (const p of game.players) p.reload = 0;
+}
+
+/**
+ * Put a freshly reset field into a running match.
+ *
+ * `countdown` is how long every launcher is held shut before it may fire. The
+ * browser passes `game.reloadTime`, so nothing fires until the start countdown
+ * finishes; the harness passes 0 and fires on the first frame. That difference
+ * was previously written out separately in `main.newMatch` and `runSim`, where
+ * neither caller said what the other did. It is one argument here so the two
+ * cannot drift apart, and so the harness's shorter opening is visible in one
+ * place rather than being an accident of which function was called.
+ *
+ * Call this after `resetField`, which clears the field and zeroes the tallies.
+ */
+export function startMatch(game: Game, countdown = 0) {
+  game.matchT = 0;
+  game.matchOver = false;
+  for (const p of game.players) p.reload = countdown;
+  game.matchRunning = true;
 }
 
 export function spawnBallGroup(game: Game, width: number, height: number) {
@@ -318,7 +339,7 @@ export function throwBall(p: LauncherPlayer, game: Game, width: number, height: 
   p.nextUp = p.then || drawFor(p, game.players, game.twoPlayer);
   p.then = drawFor(p, game.players, game.twoPlayer);
 
-  playThud('swoosh', width ? (spot.x / width) * 2 - 1 : 0, speed / (PhysicsConfig.THROW_MAX * 1.4), false, isWhite);
+  playThud(panOf(spot.x, width), speed / (PhysicsConfig.THROW_MAX * 1.4), false, isWhite);
   p.reload = game.reloadTime;
 
   if (!game.matchRunning && !game.matchOver) {
@@ -334,6 +355,8 @@ export function toCollisionState(game: Game): CollisionState {
     groups: game.groups,
     flashes: game.flashes,
     pops: game.pops,
+    // Fresh each frame: sounds are drained by the frame loop, never carried over.
+    sounds: [],
     byId: game.byId,
     lastHit: game.lastHit,
     players: game.players,

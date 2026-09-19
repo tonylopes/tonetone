@@ -1,4 +1,3 @@
-import { PhysicsConfig } from '../physics/Config';
 import { KNOBS } from '../sim/Knobs';
 
 /**
@@ -11,6 +10,23 @@ import { KNOBS } from '../sim/Knobs';
  */
 export const KNOB_IDS = Object.values(KNOBS).map(def => def.id);
 
+/**
+ * Every knob's current value, as a line that can be pasted straight into the
+ * harness: `npm run sim -- run --set "<this line>"`.
+ *
+ * It used to be joined with spaces while `--set` splits on commas, and it appended
+ * `boomspeed` and `breakoutmax`, which are not knobs. Pasting it therefore either
+ * failed or — before `parseKnobValue` was tightened — silently applied only the
+ * first knob and ran anyway. Reproducing a browser session in the harness had to
+ * be done by hand.
+ *
+ * The two appended values are left out because they are derived: `recalcThresholds`
+ * recomputes both from the knobs and the field height, so reproducing the knobs
+ * reproduces them. The one thing the line still cannot carry is that height, which
+ * scales both; pass the same `--height` to reproduce a session exactly.
+ *
+ * Quote it when pasting: some `scale` values contain a space ("Minor pentatonic").
+ */
 export function settingsLine(): string {
   const parts = KNOB_IDS.map(id => {
     const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
@@ -19,7 +35,5 @@ export function settingsLine(): string {
     return id + '=' + (typeof v === 'number' ? +v.toFixed(3) : v);
   }).filter(Boolean);
 
-  parts.push('boomspeed=' + Math.round(PhysicsConfig.BOOM_SPEED));
-  parts.push('breakoutmax=' + Math.round(PhysicsConfig.KICKOUT_MAX));
-  return parts.join(' ');
+  return parts.join(',');
 }

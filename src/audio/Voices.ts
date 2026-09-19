@@ -1,4 +1,5 @@
 import { AudioStore, BEAT, isOptionsOpen, loadAt_, MAX_THUDS, MAX_VOICES, triggerHaptic } from './SynthEngine';
+import { boomTierOf, BOOM_TIER_COUNT as RULES_BOOM_TIER_COUNT } from '../game/Rules';
 
 export const BREAK_VOICE = {
   mul: 1, dur: 0.42, jitter: 0.10, peak: 0.18, attack: 0.010, tick: 0.10,
@@ -8,11 +9,6 @@ export const BREAK_VOICE = {
 export const BOND_VOICE = {
   mul: 2.5, dur: 0.32, jitter: 0.18, peak: 0.22, attack: 0.004, tick: 0.26,
   partials: [[1, 1], [2, 0.42]] as [number, number][], open: 3400, close: 1000, dry: 0.62
-};
-
-export const BOOM_VOICE = {
-  mul: 2, dur: 3.2, jitter: 1.4, peak: 0.17, attack: 0.35, tick: 0,
-  partials: [[1, 1], [1.5, 0.25]] as [number, number][], open: 1100, close: 420, dry: 0.3
 };
 
 /**
@@ -93,16 +89,18 @@ function rampFreq(param: any, targetVal: number, targetTime: number) {
   }
 }
 
-/** Which of the five boom-size tiers a boom falls in, 0 (smallest) to 4. */
+/**
+ * Which boom-size tier a boom falls in, 0 (smallest) to 4.
+ *
+ * The thresholds are the game's, not the synth's: they come from `BOOM_TIERS` in
+ * `game/Rules`, the same table the word on the pop is read from, so the sound and
+ * the word step up together by construction rather than by a comment.
+ */
 export function boomTier(boomSize: number): number {
-  if (boomSize >= 20) return 4;
-  if (boomSize >= 15) return 3;
-  if (boomSize >= 10) return 2;
-  if (boomSize >= 5) return 1;
-  return 0;
+  return boomTierOf(boomSize);
 }
 
-export const BOOM_TIER_COUNT = 5;
+export const BOOM_TIER_COUNT = RULES_BOOM_TIER_COUNT;
 
 /**
  * Build a five-tier volume ramp that peaks at `peakTier`.
@@ -267,7 +265,6 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsG
   // 20+ came out loudest however the ramp was written. Post-compressor, the ramp
   // lands 1:1.
   const peak = BOOM_DRIVE;
-  const BEAT_OFFSET = 5; // 5 Hz binaural beat differential
 
   const startPitch = tone * 3.4;
   const midPitch = tone * 1.1;
@@ -434,9 +431,9 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsG
   const leftOsc = actx.createOscillator();
   parts.push(leftOsc);
   leftOsc.type = 'sine';
-  const startL = startPitch - BEAT_OFFSET / 2;
-  const midL = midPitch - BEAT_OFFSET / 2;
-  const endL = endPitch - BEAT_OFFSET / 2;
+  const startL = startPitch - BEAT / 2;
+  const midL = midPitch - BEAT / 2;
+  const endL = endPitch - BEAT / 2;
   leftOsc.frequency.setValueAtTime(startL, t);
   rampFreq(leftOsc.frequency, midL, t + 0.05);
   rampFreq(leftOsc.frequency, endL, t + dur);
@@ -457,9 +454,9 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsG
   const rightOsc = actx.createOscillator();
   parts.push(rightOsc);
   rightOsc.type = 'sine';
-  const startR = startPitch + BEAT_OFFSET / 2;
-  const midR = midPitch + BEAT_OFFSET / 2;
-  const endR = endPitch + BEAT_OFFSET / 2;
+  const startR = startPitch + BEAT / 2;
+  const midR = midPitch + BEAT / 2;
+  const endR = endPitch + BEAT / 2;
   rightOsc.frequency.setValueAtTime(startR, t);
   rampFreq(rightOsc.frequency, midR, t + 0.05);
   rampFreq(rightOsc.frequency, endR, t + dur);
@@ -1092,7 +1089,7 @@ function playWhiteSwoosh(xNorm: number, normForce: number) {
 }
 
 // Launch swoosh. Ball-on-ball collisions are `playKnock`.
-export function playThud(kind: 'swoosh', xNorm: number, force: number, ignoreOptionsGuard: boolean = false, isWhite: boolean = false) {
+export function playThud(xNorm: number, force: number, ignoreOptionsGuard: boolean = false, isWhite: boolean = false) {
   if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.noiseBuf || !AudioStore.master || AudioStore.clickVol <= 0) return;
   if (!ignoreOptionsGuard && isOptionsOpen()) return;
   const actx = AudioStore.actx;

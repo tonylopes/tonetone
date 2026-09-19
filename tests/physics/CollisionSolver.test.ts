@@ -139,7 +139,7 @@ describe('CollisionSolver physics module', () => {
       b2.group = g;
       state.groups = [g];
 
-      boomGroup(state, g, 1000, 0, 1, 800);
+      boomGroup(state, g, 1000, { credit: 0, width: 800 });
 
       expect(state.killGroups).toBe(1);
       expect(state.killBalls).toBe(2);
@@ -151,7 +151,7 @@ describe('CollisionSolver physics module', () => {
 
     it('handles booming an empty group safely without TypeError or NaN values', () => {
       const emptyGroup = makeGroup([], 0, 0);
-      expect(() => boomGroup(state, emptyGroup, 500, 0, 1, 800)).not.toThrow();
+      expect(() => boomGroup(state, emptyGroup, 500, { credit: 0, width: 800 })).not.toThrow();
       expect(state.pops.some(p => Number.isNaN(p.x) || Number.isNaN(p.y))).toBe(false);
     });
 
@@ -169,7 +169,7 @@ describe('CollisionSolver physics module', () => {
       b2.group = g;
       state.groups = [g];
 
-      detach(state, b1, 500, 0, 800);
+      detach(state, b1, 500, { credit: 0, width: 800 });
 
       expect(b1.bonds.size).toBe(0);
       expect(b2.bonds.size).toBe(0);
@@ -187,7 +187,7 @@ describe('CollisionSolver physics module', () => {
         b.group = g;
         state.groups = [g];
 
-        boomGroup(state, g, 5000, 0, 1, 800);
+        boomGroup(state, g, 5000, { credit: 0, width: 800 });
 
         const sp = Math.hypot(b.group.vx, b.group.vy);
         if (sp >= PhysicsConfig.BOOM_SPEED) {
@@ -232,7 +232,7 @@ describe('CollisionSolver physics module', () => {
       b2.group = g2;
       state.groups = [g1, g2];
 
-      collide(state, 1.0, 800);
+      collide(state, 1.0);
 
       expect(b1.bonds.has(2)).toBe(true);
       expect(b2.bonds.has(1)).toBe(true);
@@ -253,7 +253,7 @@ describe('CollisionSolver physics module', () => {
       state.byId.set(2, bRed);
       state.groups = [gBlack, gRed];
 
-      collide(state, 1.0, 800);
+      collide(state, 1.0);
 
       // Red ball should bond/stick directly to the Black ball
       expect(bRed.bonds.has(1)).toBe(true);
@@ -282,7 +282,7 @@ describe('CollisionSolver physics module', () => {
       state.byId.set(3, bRed);
       state.groups = [gBlack, gRed];
 
-      collide(state, 1.0, 800);
+      collide(state, 1.0);
 
       // bRed hitting bBlue does NOT force bRed to stick to group because it didn't hit bBlack directly
       expect(bRed.bonds.has(2)).toBe(false);
@@ -310,7 +310,7 @@ describe('CollisionSolver physics module', () => {
       state.byId.set(3, bWhite);
       state.groups = [gBlack, gWhite];
 
-      collide(state, 1.0, 800);
+      collide(state, 1.0);
 
       // White ball should boom the black ball group into ghost balls
       expect(bBlack.ghost).toBe(true);
@@ -333,7 +333,7 @@ describe('CollisionSolver physics module', () => {
       state.byId.set(2, bWhite);
       state.groups = [gBlack, gWhite];
 
-      collide(state, 1.0, 800);
+      collide(state, 1.0);
 
       expect(bBlack.ghost).toBe(true);
     });
@@ -364,7 +364,7 @@ describe('CollisionSolver physics module', () => {
       state.byId.set(4, bRedHitter);
       state.groups = [gGroup, gHitter];
 
-      collide(state, 1.0, 800);
+      collide(state, 1.0);
 
       // Blue balls boom into ghosts, but black ball remains alive
       expect(bBlue1.ghost).toBe(true);
@@ -415,7 +415,7 @@ describe('CollisionSolver physics module', () => {
       mover.group = gm;
       place([c1, c2, c3, mover], [group, gm]);
 
-      collide(state, 1.0, 800);
+      collide(state, 1.0);
 
       expect(mover.bonds.has(1)).toBe(true);
       // One ball joined a 3-ball group: not the old 3 × merged size of 4.
@@ -433,7 +433,7 @@ describe('CollisionSolver physics module', () => {
       mover.shot = { events: 0 };
       const gm = makeGroup([mover], 500, 0); mover.group = gm;
       place([still, mover], [gs, gm]);
-      collide(state, 1.0, 800);
+      collide(state, 1.0);
       expect(mover.bonds.has(1)).toBe(true);
     }
 
@@ -460,7 +460,7 @@ describe('CollisionSolver physics module', () => {
       const gw = makeGroup([white], 1000, 0); white.group = gw;
       place([c1, c2, white], [group, gw]);
 
-      collide(state, 1.0, 800);
+      collide(state, 1.0);
 
       expect(c1.ghost).toBe(true);
       expect(state.players[0].boomPts).toBe(boomPay(2));
@@ -473,7 +473,7 @@ describe('CollisionSolver physics module', () => {
       for (const b of chain) b.group = g;
       place(chain, [g]);
 
-      detach(state, chain[0], 300, 0, 800);
+      detach(state, chain[0], 300, { credit: 0, width: 800 });
 
       expect(state.players[0].peelPts).toBe(peelPay(5));
     });
@@ -487,7 +487,7 @@ describe('CollisionSolver physics module', () => {
       const gs = makeGroup([struck], 0, 0); struck.group = gs;
       place([hitter, struck], [gh, gs]);
 
-      collide(state, 1.0, 800);
+      collide(state, 1.0);
 
       expect(struck.credit).toBe(0);
       expect(struck.shot).toBe(hitter.shot);
@@ -501,7 +501,7 @@ describe('CollisionSolver physics module', () => {
       const gl = makeGroup([live], 0, 0); live.group = gl;
       place([debris, live], [gd, gl]);
 
-      collide(state, 1.0, 800);
+      collide(state, 1.0);
 
       expect(live.credit).toBe(1);
       expect(live.shot).toBe(debris.shot);

@@ -13,7 +13,8 @@ export const CURRENTS = [
   { c: '#12d9c2', ax: 0.33, ay: 0.28, sx: 0.15, sy: 0.16, r: 0.58, ph: 2.6 },
 ];
 
-export const FLASH_LIFE = 0.85;
+import { FLASH_LIFE } from '../physics/Types';
+export { FLASH_LIFE };
 
 export const FLASH_SPECS: Record<string, { r0: number; r1: number; amp: number; waves: number; w: number; rgb: string }> = {
   bond:    { r0: 0.5, r1: 2.6, amp: 0.40, waves: 5, w: 4.0, rgb: '90,255,240' },
