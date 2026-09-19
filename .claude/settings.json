@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run verify)",
+      "Bash(npm run verify *)",
+      "Bash(npm test)",
+      "Bash(npm test *)",
+      "Bash(npm run build)",
+      "Bash(npm run sim:physics)",
+      "Bash(npm run sim:invariants)",
+      "Bash(npm run sim:baseline)",
+      "Bash(npm run sim -- physics*)",
+      "Bash(npm run sim -- invariants*)",
+      "Bash(npm run sim -- baseline check*)",
+      "Bash(npm run sim -- sweep *)",
+      "Bash(npm run sim -- compare *)",
+      "Bash(npm run --silent sim -- physics*)",
+      "Bash(npm run --silent sim -- invariants*)",
+      "Bash(npm run --silent sim -- baseline check*)",
+      "Bash(npm run --silent sim -- sweep *)",
+      "Bash(npm run --silent sim -- compare *)",
+      "Bash(npx vitest run)",
+      "Bash(npx vitest run *)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx tsc --noEmit *)",
+      "mcp__claude_ai_Notion__notion-fetch",
+      "mcp__claude_ai_Notion__notion-search",
+      "mcp__claude_ai_Notion__notion-ai-search",
+      "mcp__claude_ai_Notion__notion-query-data-sources"
+    ]
+  }
+}

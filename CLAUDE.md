@@ -146,6 +146,34 @@ simulation that no longer exists.
 Full guide: the [Simulation Harness](https://app.notion.com/p/3dfdc052afb1812e8a39e1bbf59cbf71)
 page in Notion.
 
+## Notify me when the work is finished
+
+Work here often runs for minutes at a time — `npm run verify`, a high-`--runs`
+`sweep` or `compare`, a native build — and by the time it is over the laptop is
+probably unattended. **Send one push notification with the `PushNotification`
+tool at the point you hand the session back**, whether that is because the work
+is done or because you are stopped and need a decision.
+
+- **One notification, at the end.** Not per command, per long job, or per
+  milestone. Finishing a slow step in the middle of the work is not an event
+  worth pulling someone away from their evening for; finishing the work is.
+- **Only when the wait was long enough that nobody would still be watching.** A
+  quick answer or a one-file edit needs no notification at all.
+- **Lead with the outcome.** `verify green, pushed to main` and `verify failed: 3
+  physics tests, nothing pushed` both say something; "task done" does not.
+- **One line, under 200 characters, no markdown.** It is read on a phone.
+- Nothing is lost by sending it when it turns out the terminal *was* being
+  watched: the tool suppresses it and reports that it was not sent. That is the
+  expected result, not a failure to retry.
+
+### Put the results where they can be read
+
+A `sweep` or `compare` table, a baseline diff or a screenshot is unreadable in a
+phone terminal, and terminal scrollback is not reachable from another device at
+all. When the result of a long job is a table or an image, send it with
+`SendUserFile` or publish it as an artifact and give the link. Printing it to the
+terminal as well is fine; making the terminal the only copy is not.
+
 ## Git: one branch, commit straight to it
 
 This project is worked on a **single branch**, the one already checked out —
