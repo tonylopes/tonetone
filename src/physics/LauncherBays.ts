@@ -80,39 +80,52 @@ export function throwSpeedOf(p: LauncherPlayer, _twoPlayer?: boolean): number {
 }
 
 /**
- * How close a throw is to booming on impact: 0 at the weakest throw the bay can
- * make, 1 once it reaches `BOOM_SPEED`, and 1 for everything harder.
+ * The speed the ball actually leaves the bay at.
  *
- * This is the aim arrow's colour — white at 0, red at 1 — so the arrow reports
- * the one thing about power that decides what happens: whether the ball will
- * boom the group it hits. The arrow used to say the same thing as a switch from
- * the player's colour to pink at exactly this threshold, which is the point that
- * is preserved here: heat reaches 1 where the switch used to flip.
+ * `throwSpeedOf` is the aim's speed; `spawn` multiplies it by `KICK` on the way
+ * out, so this is the number that has to be compared against `BOOM_SPEED`.
+ * Comparing the unmultiplied one — which the old pink arrow cue did — answers a
+ * question about a ball nobody throws, and is wrong by the size of the `kick`
+ * knob in whichever direction it points.
+ */
+export function launchSpeedOf(p: LauncherPlayer, twoPlayer?: boolean): number {
+  return throwSpeedOf(p, twoPlayer) * PhysicsConfig.KICK;
+}
+
+/** True when the throw as aimed would boom the group it hits. */
+export function boomsOnImpact(p: LauncherPlayer, twoPlayer?: boolean): boolean {
+  return launchSpeedOf(p, twoPlayer) >= PhysicsConfig.BOOM_SPEED;
+}
+
+/**
+ * How far past the boom threshold a throw is: 0 the moment it starts booming,
+ * 1 at the hardest throw the bay can make, and 0 for anything that will not
+ * boom at all.
  *
- * The floor is the speed at zero strength rather than zero, because a bay never
- * throws slower than `THROW_MIN` and an arrow that starts a third of the way up
- * its own ramp does not read as weak. The threshold above it moves with the
- * `boom` and `maxpower` knobs, which is why it is read from `BOOM_SPEED` each
- * time rather than turned into a strength once. Low enough settings of the two
- * — `boom` 0.2 with `maxpower` 600 — put the threshold under the floor, meaning
- * every throw booms; the heat is then 1 throughout, which is the truth about
- * that combination rather than a case to guard against.
+ * This is the aim arrow's colour above the threshold. The arrow is white while
+ * `boomsOnImpact` is false — white meaning the shot is safe, over the whole
+ * range where it is safe — and red from the threshold up, deepening with this
+ * heat to full red at full power.
  *
- * **`KICK` is why this is not just `throwSpeedOf`.** The ball leaves the bay at
- * `throwSpeedOf(p) * KICK` — `spawn` applies the multiplier, not this function —
- * so comparing the unmultiplied speed against `BOOM_SPEED` answers a question
- * about a ball nobody throws. The old pink cue did exactly that and was wrong by
- * the size of the `kick` knob in whichever direction it pointed: late at the
- * default 1.2x, where it turned pink at strength 0.35 but the ball boomed from
- * 0.29, and early in Drift at 0.6x, where it promised a boom that did not come.
- * It was exact only in Relax, the one preset at 1.0x.
+ * **It was the other way round for a few hours on 2026-09-19**, ramping white
+ * to red over the range *below* the threshold and holding red above it. That
+ * put the whole colour change in the first third of the drag and left the top
+ * two thirds — every throw that actually booms, which is the half of the range
+ * a player is choosing between — at one flat red. Tony asked for the opposite:
+ * white for as long as the throw will not boom, and the red still climbing at
+ * maximum strength.
+ *
+ * Both ends move with the knobs, so both are read fresh each time: `boom` and
+ * `maxpower` set `BOOM_SPEED`, `maxpower` and `kick` set the ceiling. If a knob
+ * combination puts the threshold at or above the hardest throw, nothing booms
+ * and the heat is 0 throughout — the arrow stays white, which is the truth
+ * about that combination.
  */
 export function boomHeatOf(p: LauncherPlayer, twoPlayer?: boolean): number {
-  const launched = PhysicsConfig.KICK;
-  const floor = PhysicsConfig.THROW_MIN * PhysicsConfig.DUEL_POWER * PhysicsConfig.SC * launched;
-  const span = PhysicsConfig.BOOM_SPEED - floor;
-  if (span <= 0) return 1;
-  return Math.max(0, Math.min(1, (throwSpeedOf(p, twoPlayer) * launched - floor) / span));
+  const ceiling = PhysicsConfig.THROW_MAX * PhysicsConfig.DUEL_POWER * PhysicsConfig.SC * PhysicsConfig.KICK;
+  const span = ceiling - PhysicsConfig.BOOM_SPEED;
+  if (span <= 0) return 0;
+  return Math.max(0, Math.min(1, (launchSpeedOf(p, twoPlayer) - PhysicsConfig.BOOM_SPEED) / span));
 }
 
 /**

@@ -9,6 +9,8 @@ import {
   aimAt,
   throwSpeedOf,
   boomHeatOf,
+  boomsOnImpact,
+  launchSpeedOf,
   mouthNormalAt,
   clearExempt,
 } from '../../src/physics/LauncherBays';
@@ -203,77 +205,101 @@ describe('LauncherBays module', () => {
     });
   });
 
-  describe('boomHeatOf', () => {
-    it('reads 0 at the weakest throw and 1 once the throw would boom', () => {
+  describe('boomHeatOf and boomsOnImpact', () => {
+    it('stays 0 for every throw that will not boom, and reaches 1 at full power', () => {
       const p = makeLauncher(1);
 
       p.strength = 0;
+      expect(boomsOnImpact(p, false)).toBe(false);
       expect(boomHeatOf(p, false)).toBe(0);
 
-      // The heat reaches 1 exactly where throwSpeedOf reaches BOOM_SPEED, which
-      // is the threshold the arrow used to report by switching colour outright.
+      // Full power is the hardest throw the bay can make, so it is the top of
+      // the ramp by definition.
       p.strength = 1;
+      expect(boomsOnImpact(p, false)).toBe(true);
       expect(boomHeatOf(p, false)).toBe(1);
     });
 
-    it('rises with strength and saturates at the threshold rather than at full power', () => {
+    it('is 0 right up to the threshold and climbs from there, not before it', () => {
+      // This is the whole shape of the cue, and it was the other way round for
+      // a few hours on 2026-09-19: white while the throw is safe, red climbing
+      // across every throw that booms.
       const p = makeLauncher(1);
-      const heats = [0, 0.1, 0.2, 0.3].map((s) => {
-        p.strength = s;
-        return boomHeatOf(p, false);
-      });
-      for (let i = 1; i < heats.length; i++) {
-        expect(heats[i]).toBeGreaterThan(heats[i - 1]);
+      let lastHeat = -1;
+      let sawClimb = false;
+      for (let s = 0; s <= 1.0001; s += 0.01) {
+        p.strength = Math.min(1, s);
+        const heat = boomHeatOf(p, false);
+        if (!boomsOnImpact(p, false)) {
+          expect(heat).toBe(0);
+        } else {
+          expect(heat).toBeGreaterThanOrEqual(lastHeat);
+          if (heat > lastHeat) sawClimb = true;
+        }
+        lastHeat = heat;
       }
-
-      // Find where it saturates and check that it is the boom threshold, not 1.0
-      // strength: a throw that booms is not the hardest throw the bay can make.
-      let saturatedAt = 1;
-      for (let s = 0; s <= 1; s += 0.01) {
-        p.strength = s;
-        if (boomHeatOf(p, false) >= 1) { saturatedAt = s; break; }
-      }
-      expect(saturatedAt).toBeLessThan(1);
-      p.strength = saturatedAt;
-      // What booms is the speed the ball actually leaves at, which `spawn`
-      // multiplies by KICK — the arrow has to answer that question, not the
-      // unmultiplied one.
-      expect(throwSpeedOf(p, false) * PhysicsConfig.KICK).toBeGreaterThanOrEqual(PhysicsConfig.BOOM_SPEED);
+      // It must actually be a ramp over the booming range, not a step.
+      expect(sawClimb).toBe(true);
+      expect(lastHeat).toBe(1);
     });
 
-    it('reaches red where the ball really booms, KICK included', () => {
-      // At the shipped kick of 1.2x the old pink cue was late: pink at strength
-      // 0.35, booming from 0.29. Walk the range and check the heat saturates on
-      // the launched speed, not on throwSpeedOf alone.
+    it('spends the ramp on the throws a player is choosing between', () => {
+      // Half the drag or more booms at the defaults, and that is the half the
+      // colour has to report: the heat at the midpoint of the booming range
+      // should be neither 0 nor 1.
       const p = makeLauncher(1);
-      for (let s = 0; s <= 1; s += 0.01) {
-        p.strength = s;
-        const booms = throwSpeedOf(p, false) * PhysicsConfig.KICK >= PhysicsConfig.BOOM_SPEED;
-        expect(boomHeatOf(p, false) >= 1).toBe(booms);
+      p.strength = 0.65;
+      expect(boomsOnImpact(p, false)).toBe(true);
+      const mid = boomHeatOf(p, false);
+      expect(mid).toBeGreaterThan(0.05);
+      expect(mid).toBeLessThan(0.95);
+    });
+
+    it('measures the launched speed, KICK included, not the aim speed', () => {
+      const p = makeLauncher(1);
+      p.strength = 0.5;
+      expect(launchSpeedOf(p, false)).toBeCloseTo(throwSpeedOf(p, false) * PhysicsConfig.KICK);
+
+      // The old pink cue compared the aim speed against BOOM_SPEED, so at the
+      // default 1.2x kick it called a booming throw safe.
+      const before = PhysicsConfig.KICK;
+      try {
+        PhysicsConfig.KICK = 1.2;
+        for (let s = 0; s <= 1; s += 0.01) {
+          p.strength = s;
+          expect(boomsOnImpact(p, false)).toBe(
+            throwSpeedOf(p, false) * PhysicsConfig.KICK >= PhysicsConfig.BOOM_SPEED
+          );
+        }
+      } finally {
+        PhysicsConfig.KICK = before;
       }
     });
 
     it('is the same in solo and in a duel, as the speed behind it is', () => {
       const p = makeLauncher(1);
-      p.strength = 0.25;
+      p.strength = 0.65;
       expect(boomHeatOf(p, false)).toBe(boomHeatOf(p, true));
     });
 
-    it('is 1 throughout when the knobs put the threshold under the weakest throw', () => {
-      // `boom` 0.2 with `maxpower` 600 is a reachable pair, and it means every
-      // throw booms. A fully red arrow is then the truth, not a clamp artefact.
-      const before = { at: PhysicsConfig.BOOM_AT, max: PhysicsConfig.THROW_MAX };
+    it('stays 0 when the knobs put the threshold out of the bay\'s reach', () => {
+      // `boom` 1.0 with `maxpower` 600 and `kick` 0.2 is a reachable set, and it
+      // means nothing can boom at all. A white arrow throughout is the truth
+      // about that combination, not a clamp artefact.
+      const before = { at: PhysicsConfig.BOOM_AT, max: PhysicsConfig.THROW_MAX, kick: PhysicsConfig.KICK };
       try {
-        PhysicsConfig.BOOM_AT = 0.2;
+        PhysicsConfig.BOOM_AT = 1;
         PhysicsConfig.THROW_MAX = 600;
+        PhysicsConfig.KICK = 0.2;
         recalcThresholds(620);
         const p = makeLauncher(1);
-        p.strength = 0;
-        expect(throwSpeedOf(p, false) * PhysicsConfig.KICK).toBeGreaterThan(PhysicsConfig.BOOM_SPEED);
-        expect(boomHeatOf(p, false)).toBe(1);
+        p.strength = 1;
+        expect(boomsOnImpact(p, false)).toBe(false);
+        expect(boomHeatOf(p, false)).toBe(0);
       } finally {
         PhysicsConfig.BOOM_AT = before.at;
         PhysicsConfig.THROW_MAX = before.max;
+        PhysicsConfig.KICK = before.kick;
         recalcThresholds(620);
       }
     });

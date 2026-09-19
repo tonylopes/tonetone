@@ -84,17 +84,28 @@ export const INK: Rgb = [0xf3, 0xe7, 0xff];
 export const FIELD_BG: Rgb = [0x14, 0x0a, 0x2b];
 
 /**
- * The aim arrow at full force: the hot end of the `WHITE` to `AIM_HOT` ramp the
- * arrow is painted along.
+ * The two reds the aim arrow burns through once the throw would boom.
  *
- * The arrow used to wear the player's own colour, turning `PINK` for both of
- * them once the throw would boom. That made it a fourth thing cyan and pink
- * meant — player, launcher, and now power — and in a duel player 2's arrow was
- * the boom colour at every strength. Red belongs to nothing else on the table:
- * it is CIEDE2000 38.0 from `PINK` and 62.5 from `CYAN`, so a hot arrow cannot
- * be read as a player, and its nearest ball is the gold at 37.6.
+ * The arrow is **white for every throw that will not boom**, so white is not a
+ * colour on this ramp but the state before it: it says the shot is safe. The
+ * moment the throw crosses `BOOM_SPEED` the arrow snaps to `AIM_WARN`, and from
+ * there to full power it deepens to `AIM_HOT`. The snap is the threshold — a
+ * `WHITE`-to-red jump of CIEDE2000 36.7, which is not something a player can
+ * miss — and the deepening is how much power is behind it.
+ *
+ * The two reds are only 12.0 apart, so the *hue* does little of that second
+ * job; `drawAim` grows the glow with the same heat, which is what makes full
+ * power read as hotter rather than merely redder. Keep them close: they are two
+ * ends of one ramp, not two states to tell apart.
+ *
+ * The arrow used to wear the player's own colour and turn `PINK` for both of
+ * them at the threshold. That made cyan and pink mean a fourth thing — player,
+ * launcher, and now power — and in a duel player 2's arrow was the boom colour
+ * at every strength. Red belongs to nothing else on the table: `AIM_HOT` is
+ * 39.2 from `PINK`, 63.7 from `CYAN` and 39.0 from its nearest ball, the gold.
  */
-export const AIM_HOT: Rgb = [0xff, 0x2b, 0x18];
+export const AIM_WARN: Rgb = [0xff, 0x6b, 0x52];
+export const AIM_HOT: Rgb = [0xff, 0x00, 0x00];
 
 // ── Menu ───────────────────────────────────────────────────────────────────
 // The menu screen keeps two brand colours of its own. A third, `#ff00aa`, was

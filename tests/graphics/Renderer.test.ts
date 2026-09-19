@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { drawPops, drawOneLauncher, popCenterX, POP_EDGE_PAD, RenderContext, P_COLOR } from '../../src/graphics/Renderer';
-import { AIM_HOT, CYAN, PINK, VOID, WHITE, rgba } from '../../src/graphics/Palette';
+import { AIM_HOT, AIM_WARN, CYAN, PINK, VOID, WHITE, rgba } from '../../src/graphics/Palette';
 import { recalcThresholds } from '../../src/physics/Config';
 import { restoreConfig, snapshotConfig } from '../../src/sim/Knobs';
 import { createGame } from '../../src/game/GameState';
@@ -196,39 +196,47 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
   beforeEach(() => recalcThresholds(600));
   afterEach(() => restoreConfig(snap));
 
-  it('paints the arrow along a white-to-red power ramp, ending at the boom threshold', () => {
-    const weak = drawArrow(0);
-    const mid = drawArrow(0.2);
-    const hard = drawArrow(0.9);
+  it('stays white for every throw that will not boom, and turns red for every throw that will', () => {
+    // White is the state before the ramp, not a colour on it: it says the shot
+    // is safe, and it says so over the whole range where that is true.
+    for (const strength of [0, 0.1, 0.2]) {
+      expect(channels(drawArrow(strength).shaft), 'strength ' + strength).toEqual([...WHITE]);
+    }
+    for (const strength of [0.5, 0.8, 1]) {
+      const [r, g, b] = channels(drawArrow(strength).shaft);
+      expect(r, 'strength ' + strength).toBe(255);
+      expect(g, 'strength ' + strength).toBeLessThanOrEqual(AIM_WARN[1]);
+      expect(b, 'strength ' + strength).toBeLessThanOrEqual(AIM_WARN[2]);
+    }
+  });
 
-    // The weakest throw the bay can make is white, and anything at or past the
-    // speed that booms on impact is the full red. 0.9 is far past it.
-    expect(channels(weak.shaft)).toEqual([...WHITE]);
-    expect(channels(hard.shaft)).toEqual([...AIM_HOT]);
+  it('keeps deepening across the booming range and reaches AIM_HOT at full power', () => {
+    // The complaint that produced this ramp was that the arrow stopped changing
+    // well before full strength, so the booming range is exactly what has to
+    // carry it.
+    expect(channels(drawArrow(1).shaft)).toEqual([...AIM_HOT]);
 
-    // In between it is neither: white's red channel is already 255, so it is the
-    // other two that fall as the throw heats up.
-    const [r, g, b] = channels(mid.shaft);
-    expect(r).toBe(255);
-    expect(g).toBeGreaterThan(AIM_HOT[1]);
-    expect(g).toBeLessThan(255);
-    expect(b).toBeGreaterThan(AIM_HOT[2]);
-    expect(b).toBeLessThan(255);
+    const greens = [0.4, 0.6, 0.8, 1].map((s) => channels(drawArrow(s).shaft)[1]);
+    for (let i = 1; i < greens.length; i++) {
+      expect(greens[i], 'step ' + i).toBeLessThan(greens[i - 1]);
+    }
+  });
 
-    // The shaft and the head are one arrow and are always painted alike.
-    expect(weak.shaft).toBe(weak.head);
-    expect(mid.shaft).toBe(mid.head);
-    expect(hard.shaft).toBe(hard.head);
+  it('paints the shaft and the head alike at every strength', () => {
+    for (const strength of [0, 0.2, 0.6, 1]) {
+      const drawn = drawArrow(strength);
+      expect(drawn.shaft, 'strength ' + strength).toBe(drawn.head);
+    }
   });
 
   it('gives both players the same arrow, so its colour reads as power and not as whose turn it is', () => {
-    // This is the whole point of the ramp: the arrow used to be cyan for player
-    // 1 and pink for player 2, and pink again for either of them once the throw
-    // would boom — so player 2's arrow was the boom colour at every strength.
-    for (const strength of [0, 0.2, 0.9]) {
-      expect(drawArrow(strength, 1).shaft).toBe(drawArrow(strength, 0).shaft);
+    // The arrow used to be cyan for player 1 and pink for player 2, and pink
+    // again for either of them once the throw would boom — so player 2's arrow
+    // was the boom colour at every strength.
+    for (const strength of [0, 0.2, 0.6, 1]) {
+      expect(drawArrow(strength, 1).shaft, 'strength ' + strength).toBe(drawArrow(strength, 0).shaft);
     }
-    expect(drawArrow(0.2, 1).shaft).not.toContain(rgba(PINK, 0).slice(0, -2));
+    expect(drawArrow(0.6, 1).shaft).not.toContain(rgba(PINK, 0).slice(0, -2));
     expect(drawArrow(0.2, 0).shaft).not.toContain(rgba(CYAN, 0).slice(0, -2));
   });
 
@@ -239,7 +247,7 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
 
   it('edges the arrow in the dark void, which a white arrow needs and a white outline cannot give', () => {
     const voidPrefix = rgba(VOID, 0).slice(0, -2);
-    for (const strength of [0, 0.9]) {
+    for (const strength of [0, 1]) {
       const drawn = drawArrow(strength);
       expect(drawn.all.some((style) => style.startsWith(voidPrefix))).toBe(true);
     }
