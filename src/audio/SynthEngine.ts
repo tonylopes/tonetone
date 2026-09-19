@@ -114,7 +114,7 @@ export const AudioStore: AudioState = {
   breakVol: 1.7,
   boomVol: 1,
   clickVol: 0.5,
-  drone: 1.0,
+  drone: 0.55,
   haptics: 1,
   boomCut: 300,
   latency: 0.05,
