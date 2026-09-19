@@ -6,7 +6,7 @@ import { rebuildGroups } from '../physics/RigidBody';
 import { aimDirOf, launchPointOf, throwSpeedOf } from '../physics/LauncherBays';
 import { playSwoosh } from '../audio/Voices';
 import { panOf } from '../audio/SoundEvents';
-import { CollisionState } from '../physics/CollisionSolver';
+import { CollisionState, RAIN_BLINK, RAIN_GRACE } from '../physics/CollisionSolver';
 import { stopAllVoices } from '../audio/SynthEngine';
 import { TAU } from '../math';
 
@@ -70,9 +70,10 @@ export interface Game {
 
 export function getRainBallAlpha(rainTime?: number): number {
   if (rainTime === undefined || rainTime <= 0) return 1.0;
-  const total = 1.0;
-  const elapsed = total - Math.min(total, rainTime);
-  const cycle = (elapsed / total) * Math.PI * 6;
+  const elapsed = RAIN_GRACE - Math.min(RAIN_GRACE, rainTime);
+  // One full pulse per blink, so a ball held back for another blink keeps pulsing
+  // without a jump.
+  const cycle = (elapsed / RAIN_BLINK) * TAU;
   const alpha = 0.5 * (1 - Math.cos(cycle));
   return Math.max(0, Math.min(0.9, alpha));
 }
@@ -231,7 +232,7 @@ export function spawnRainBall(game: Game, width: number, height: number): boolea
     const ry = minY + Math.random() * (maxY - minY);
     if (spawn(game, rx, ry, 90, 240, null, width, height)) {
       const spawned = game.balls[game.balls.length - 1];
-      if (spawned) spawned.rainTime = 1.0;
+      if (spawned) spawned.rainTime = RAIN_GRACE;
       return true;
     }
   }

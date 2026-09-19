@@ -13,7 +13,8 @@ import { advanceFrame } from '../../src/sim/Frame';
 import { launchPointOf } from '../../src/physics/LauncherBays';
 import { setupTouchControls } from '../../src/ui/TouchControls';
 import { LauncherPlayer, Ball, Group } from '../../src/physics/Types';
-import { collide, boomGroup } from '../../src/physics/CollisionSolver';
+import { collide, boomGroup, RAIN_BLINK } from '../../src/physics/CollisionSolver';
+import { makeBall, weld, loose, withSandbox } from '../../src/sim/Scenarios';
 import { makeGroup } from '../../src/physics/RigidBody';
 import { playNote, playSwoosh } from '../../src/audio/Voices';
 import { AudioStore } from '../../src/audio/SynthEngine';
@@ -379,6 +380,44 @@ describe('Bug Detection Test Suite', () => {
       } finally {
         (globalThis as any).document = prevDocument;
       }
+    });
+  });
+
+  describe('Rain landing', () => {
+    // A rain ball passes through everything while it blinks in. One that turned
+    // solid inside a rigid group could not be pushed out, because every way out
+    // was blocked by another member of the same group: the harness measured
+    // overlaps up to 12.6px lasting seconds. It now waits until it is clear.
+    function ring(cx: number, cy: number) {
+      const members: Ball[] = [];
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        members.push(makeBall(k + 1, cx + 24 * Math.cos(a), cy + 24 * Math.sin(a), 1));
+      }
+      return members;
+    }
+
+    it('stays intangible while its grace ends inside a group, and blinks again', () => {
+      const members = ring(500, 500);
+      const drop = makeBall(7, 510, 500, 2);
+      drop.rainTime = 0.001;
+      const groups = [weld(members), loose(drop)];
+      withSandbox([...members, drop], groups, {}, sb => {
+        sb.step(1 / 240);
+        expect(drop.rainTime).toBeCloseTo(RAIN_BLINK, 10);
+        expect(drop.x).toBe(510); // not shoved: nothing touches it yet
+      });
+    });
+
+    it('turns solid as soon as its grace ends in the clear', () => {
+      const members = ring(500, 500);
+      const drop = makeBall(7, 800, 500, 2);
+      drop.rainTime = 0.001;
+      const groups = [weld(members), loose(drop)];
+      withSandbox([...members, drop], groups, {}, sb => {
+        sb.step(1 / 240);
+        expect(drop.rainTime).toBeUndefined();
+      });
     });
   });
 

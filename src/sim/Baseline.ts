@@ -12,6 +12,7 @@
  * only appears when the same shot is measured at two heights.
  */
 import { RunResult, SimOptions, runSim } from './Harness';
+import { presetKnobs } from './Knobs';
 
 export interface BaselineScenario {
   label: string;
@@ -31,6 +32,23 @@ export const BASELINE_SCENARIOS: BaselineScenario[] = [
   { label: 'solo/380x460/s1', opts: { mode: 'solo', seed: 1, seconds: 60, height: 460 } },
   // A tablet-sized field.
   { label: 'duel/768x1024/s1', opts: { mode: 'duel', seed: 1, seconds: 60, width: 768, height: 1024 } },
+];
+
+const chaos = presetKnobs('chaos');
+delete chaos.match;
+
+/**
+ * The invariants gate runs these on top of the baseline scenarios.
+ *
+ * Each is a seed that once put a rain ball down inside a rigid group, which no
+ * baseline seed happens to do. Chaos seed 19 left an 8.4px overlap for a frame;
+ * forced rain seed 8 wedged a ball 12.6px deep for three seconds. They are here
+ * rather than in the baseline so that adding them does not move it.
+ */
+export const INVARIANT_SCENARIOS: BaselineScenario[] = [
+  ...BASELINE_SCENARIOS,
+  { label: 'chaos/duel/380x620/s19', opts: { mode: 'duel', seed: 19, seconds: 60, knobs: chaos } },
+  { label: 'rain0.8/duel/380x620/s8', opts: { mode: 'duel', seed: 8, seconds: 60, knobs: { rain: 0.8 } } },
 ];
 
 /**

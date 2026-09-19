@@ -15,7 +15,7 @@ import { TAU } from '../math';
  *
  * Several are numerically equal to unrelated values elsewhere and must not be
  * merged with them: `SPIN_CAP` is 12 like the default ball radius and
- * `RULE_SPEED`, and `SPIN_STOP` is 0.02 like `relax`'s overlap slop.
+ * `RULE_SPEED`, and `SPIN_STOP` is 0.02 like `OVERLAP_SLOP`.
  */
 
 /** Debris never leaves a boom slower than this (x SC), so a boom always scatters. */
@@ -61,6 +61,13 @@ const SPIN_CAP = 12;
 
 /** How many passes `relax` makes at the overlaps each substep. */
 export const RELAX_ITERATIONS = 24;
+/** Overlap, in px, that `relax` leaves alone rather than pushing apart. */
+const OVERLAP_SLOP = 0.02;
+
+/** Seconds a rain ball stays intangible after it appears, blinking in. */
+export const RAIN_GRACE = 1.0;
+/** It blinks three times over that second, so one blink lasts this long. */
+export const RAIN_BLINK = RAIN_GRACE / 3;
 
 export interface CollisionState {
   balls: Ball[];
@@ -508,7 +515,7 @@ export function collide(state: CollisionState, now: number) {
 
 export function relax(state: CollisionState, iterations: number, width: number, height: number) {
   const R = PhysicsConfig.R;
-  const SLOP = 0.02, min = 2 * R, EDGE = 0.05;
+  const min = 2 * R, EDGE = 0.05;
 
   // Clamp everything out of launch bays before the iteration loop,
   // in case stepPhysics movement already drove a ball inside.
@@ -538,7 +545,7 @@ export function relax(state: CollisionState, iterations: number, width: number, 
       if (d < 1e-6) { const ang = Math.random() * TAU; nx = Math.cos(ang); ny = Math.sin(ang); d = 0; }
       else { nx = dx / d; ny = dy / d; }
       const push = min - d;
-      if (push <= SLOP) return;
+      if (push <= OVERLAP_SLOP) return;
 
       const A = a.group, B = b.group;
       const wA = 1 / A.members.length, wB = 1 / B.members.length;
@@ -571,6 +578,28 @@ export function relax(state: CollisionState, iterations: number, width: number, 
     }
     if (!moved) break;
   }
+}
+
+/**
+ * Whether a rain ball at the end of its grace would turn solid inside another ball.
+ *
+ * A rain ball passes through everything while it blinks in, so a group can drift
+ * over it, or it over a group. If it turned solid there it would be deep inside a
+ * rigid group, where every way out is blocked by another member of the same group
+ * and `relax`, which only pushes pairs apart, cannot free it: pushes from opposite
+ * members cancel. That was the source of every deep cross-group overlap the
+ * harness found, some lasting seconds. Such a ball blinks once more instead and
+ * lands when it is clear. Other rain balls do not count, since they are not solid
+ * yet; whichever of two overlapping ones lands first holds the other back.
+ */
+function landsInside(balls: Ball[], b: Ball): boolean {
+  const reach = 2 * PhysicsConfig.R - OVERLAP_SLOP;
+  for (const o of balls) {
+    if (o === b || (o.rainTime && o.rainTime > 0)) continue;
+    const dx = o.x - b.x, dy = o.y - b.y;
+    if (dx * dx + dy * dy < reach * reach) return true;
+  }
+  return false;
 }
 
 export function stepPhysics(state: CollisionState, dt: number, now: number, width: number, height: number) {
@@ -612,7 +641,10 @@ export function stepPhysics(state: CollisionState, dt: number, now: number, widt
   for (const b of state.balls) {
     if (b.rainTime && b.rainTime > 0) {
       b.rainTime = Math.max(0, b.rainTime - dt);
-      if (b.rainTime === 0) delete b.rainTime;
+      if (b.rainTime === 0) {
+        if (landsInside(state.balls, b)) b.rainTime = RAIN_BLINK;
+        else delete b.rainTime;
+      }
     }
   }
   ageGhosts(state, dt);

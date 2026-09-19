@@ -26,7 +26,7 @@ import { TOLERANCE, violations } from '../src/sim/Metrics';
 import { catchUp, compare, estimate } from '../src/sim/Stats';
 import { runPhysicsChecks } from '../src/sim/PhysicsChecks';
 import {
-  BASELINE_SCENARIOS, BASELINE_VERSION, BaselineFile,
+  BASELINE_VERSION, BaselineFile, INVARIANT_SCENARIOS,
   diffBaseline, measureBaseline,
 } from '../src/sim/Baseline';
 
@@ -409,7 +409,7 @@ function cmdInvariants(args: Args): number {
   const rows: (string | number)[][] = [];
   let ok = true;
 
-  for (const s of BASELINE_SCENARIOS) {
+  for (const s of INVARIANT_SCENARIOS) {
     const r = runSim({ ...s.opts, seconds });
     const bad = violations(r.worst);
     if (bad.length) ok = false;
