@@ -22,8 +22,18 @@ export function aimDirOf(p: LauncherPlayer): number {
     : Math.PI / 2 + (p.aimDeg * Math.PI) / 180;
 }
 
-export function aimSpan(height: number, twoPlayer: boolean): number {
-  return twoPlayer ? height * 0.40 : height * 0.80;
+/**
+ * How far a drag must reach from the bay for a full-strength throw.
+ *
+ * It is the same in every mode. Solo used to take twice the two-player span, on
+ * the grounds that one player has the whole height to drag in, but a drag can
+ * only go half the width sideways: on a 412×915 phone a sideways drag topped out
+ * at 0.28 strength in solo against 0.56 in a duel, so aiming from the bottom
+ * corners barely threw at all and the same gesture threw half as hard as it did
+ * against the AI.
+ */
+export function aimSpan(height: number): number {
+  return height * 0.40;
 }
 
 /**
@@ -56,18 +66,17 @@ export function aimReachOf(p: LauncherPlayer, width: number, height: number, two
   return Math.min(maxReach, Math.max(38, reach));
 }
 
-export function aimAt(p: LauncherPlayer, x: number, y: number, width: number, height: number, twoPlayer: boolean) {
+export function aimAt(p: LauncherPlayer, x: number, y: number, width: number, height: number) {
   const m = launchPointOf(p, width, height);
   const dx = x - m.x, dy = y - m.y;
   const raw = p.side > 0 ? Math.atan2(dx, -dy) : Math.atan2(-dx, dy);
   p.aimDeg = Math.max(-90, Math.min(90, (raw * 180) / Math.PI));
-  p.strength = Math.max(0, Math.min(1, Math.hypot(dx, dy) / aimSpan(height, twoPlayer)));
+  p.strength = Math.max(0, Math.min(1, Math.hypot(dx, dy) / aimSpan(height)));
 }
 
 // `_twoPlayer` is deliberately ignored: throw power is mode-independent so that a
-// single-player shot can still reach BOOM_SPEED. The parameter stays for call-site
-// symmetry with `aimSpan`/`setAim`, which do vary by mode, and
-// LauncherBays.test.ts pins speed1P === speed2P.
+// single-player shot can still reach BOOM_SPEED. LauncherBays.test.ts pins
+// speed1P === speed2P.
 export function throwSpeedOf(p: LauncherPlayer, _twoPlayer?: boolean): number {
   const t = Math.pow(Math.max(0, p.strength), PhysicsConfig.POWER_CURVE);
   return (

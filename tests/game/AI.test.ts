@@ -30,7 +30,7 @@ describe('AI module', () => {
     const b2 = createMockBall(2, 215, 300);
     const g = makeGroup([b1, b2], 0, 0);
 
-    aiAim(aiPlayer, [g], [b1, b2], 800, 600, false);
+    aiAim(aiPlayer, [g], [b1, b2], 800, 600);
 
     // AI should rotate launcher angle toward (207.5, 300)
     expect(aiPlayer.aimDeg).not.toBe(0);
@@ -42,7 +42,7 @@ describe('AI module', () => {
     const b1 = createMockBall(1, 500, 200);
     const g = makeGroup([b1], 0, 0);
 
-    aiAim(aiPlayer, [g], [b1], 800, 600, false);
+    aiAim(aiPlayer, [g], [b1], 800, 600);
 
     expect(aiPlayer.aimDeg).not.toBe(0);
     expect(aiPlayer.strength).toBeGreaterThan(0);
@@ -50,7 +50,7 @@ describe('AI module', () => {
 
   it('uses idle wander angle when court is empty', () => {
     const aiPlayer = makeLauncher(-1);
-    aiAim(aiPlayer, [], [], 800, 600, false);
+    aiAim(aiPlayer, [], [], 800, 600);
 
     expect(aiPlayer._idleDeg).toBeDefined();
     expect(aiPlayer.strength).toBeGreaterThan(0);
@@ -62,7 +62,7 @@ describe('AI module', () => {
     const b2 = createMockBall(2, 215, 300);
     const g = makeGroup([b1, b2], 0, 0);
 
-    aiAim(aiPlayer, [g], [b1, b2], 800, 600, false);
+    aiAim(aiPlayer, [g], [b1, b2], 800, 600);
 
     expect((aiPlayer as any)._targetStrength).toBeGreaterThanOrEqual(0.35);
     expect((aiPlayer as any)._targetStrength).toBeLessThanOrEqual(1.0);

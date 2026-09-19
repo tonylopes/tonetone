@@ -11,6 +11,7 @@ import { clearSpriteCache } from '../../src/graphics/Sprites';
 import { createGame, resetField, toCollisionState } from '../../src/game/GameState';
 import { advanceFrame } from '../../src/sim/Frame';
 import { launchPointOf } from '../../src/physics/LauncherBays';
+import { setupTouchControls } from '../../src/ui/TouchControls';
 import { LauncherPlayer, Ball, Group } from '../../src/physics/Types';
 import { collide, boomGroup } from '../../src/physics/CollisionSolver';
 import { makeGroup } from '../../src/physics/RigidBody';
@@ -378,6 +379,43 @@ describe('Bug Detection Test Suite', () => {
       } finally {
         (globalThis as any).document = prevDocument;
       }
+    });
+  });
+
+  describe('Solo aiming', () => {
+    // Solo used to scale a drag by twice the two-player span, so the same
+    // gesture threw half as hard as it did against the AI, and a drag towards
+    // the bottom corners could not get past 0.28 strength on a tall phone.
+    function strengthFromDrag(twoPlayer: boolean, aiOn: boolean, x: number, y: number) {
+      const W = 412, H = 915;
+      const handlers: Record<string, (e: any) => void> = {};
+      const canvas: any = {
+        addEventListener: (type: string, fn: (e: any) => void) => { handlers[type] = fn; },
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: W, height: H }),
+        setPointerCapture: () => {},
+      };
+      const game = createGame();
+      game.twoPlayer = twoPlayer;
+      game.aiOn = aiOn;
+      const prevCtx = AudioStore.actx;
+      AudioStore.actx = { state: 'running' } as any;
+      try {
+        setupTouchControls(canvas, () => game, () => {});
+        handlers.pointerdown({ pointerId: 1, clientX: x, clientY: y });
+      } finally {
+        AudioStore.actx = prevCtx;
+      }
+      return game.players[0].strength;
+    }
+
+    it('throws as hard in solo as against the AI for the same drag', () => {
+      for (const [x, y] of [[206, 500], [0, 880], [412, 870], [120, 700]]) {
+        expect(strengthFromDrag(false, false, x, y)).toBeCloseTo(strengthFromDrag(true, true, x, y), 10);
+      }
+    });
+
+    it('lets a drag towards a bottom corner build real power in solo', () => {
+      expect(strengthFromDrag(false, false, 0, 880)).toBeGreaterThan(0.5);
     });
   });
 });

@@ -60,9 +60,8 @@ describe('LauncherBays module', () => {
   });
 
   describe('aimSpan, aimMaxReach & aimReachOf', () => {
-    it('calculates aim span based on twoPlayer flag', () => {
-      expect(aimSpan(600, false)).toBe(600 * 0.80);
-      expect(aimSpan(600, true)).toBe(600 * 0.40);
+    it('uses one aim span in every mode', () => {
+      expect(aimSpan(600)).toBe(600 * 0.40);
     });
 
     it('calculates aimMaxReach to stay within the player playing area boundary', () => {
@@ -143,7 +142,7 @@ describe('LauncherBays module', () => {
     it('sets aimDeg and strength toward target coordinate', () => {
       const p = makeLauncher(1); // side > 0, bottom launcher at (400, 500)
       const width = 800, height = 538; // bay inset is 38, so launchPoint = (400, 500)
-      aimAt(p, 400, 300, width, height, false);
+      aimAt(p, 400, 300, width, height);
 
       // Aiming straight up -> dx = 0, dy = -200 -> raw = atan2(0, 200) = 0
       expect(p.aimDeg).toBe(0);
@@ -152,10 +151,10 @@ describe('LauncherBays module', () => {
 
     it('clamps aimDeg between -90 and +90', () => {
       const p = makeLauncher(1);
-      aimAt(p, 10000, 500, 800, 600, false);
+      aimAt(p, 10000, 500, 800, 600);
       expect(p.aimDeg).toBeLessThanOrEqual(90);
 
-      aimAt(p, -10000, 500, 800, 600, false);
+      aimAt(p, -10000, 500, 800, 600);
       expect(p.aimDeg).toBeGreaterThanOrEqual(-90);
     });
   });

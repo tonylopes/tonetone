@@ -177,7 +177,7 @@ function applyPolicy(
 ): void {
   switch (policy) {
     case 'engine-ai':
-      aiAim(p, game.groups, game.balls, width, height, game.twoPlayer);
+      aiAim(p, game.groups, game.balls, width, height);
       return;
     case 'random':
       p.aimDeg = Math.random() * 180 - 90;

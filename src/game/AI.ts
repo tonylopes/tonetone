@@ -1,7 +1,7 @@
 import { Ball, Group, LauncherPlayer } from '../physics/Types';
 import { aimAt, launchPointOf } from '../physics/LauncherBays';
 
-export function aiAim(p: LauncherPlayer, groups: Group[], balls: Ball[], width: number, height: number, twoPlayer: boolean) {
+export function aiAim(p: LauncherPlayer, groups: Group[], balls: Ball[], width: number, height: number) {
   let best: Group | null = null, most = 0;
   for (const g of groups) {
     if (!g.members.length || g.members[0].ghost) continue;
@@ -21,7 +21,7 @@ export function aiAim(p: LauncherPlayer, groups: Group[], balls: Ball[], width: 
       (p as any)._targetGroup = best;
       (p as any)._targetStrength = 0.35 + Math.random() * 0.65;
     }
-    aimAt(tempP, best.com.x, best.com.y, width, height, twoPlayer);
+    aimAt(tempP, best.com.x, best.com.y, width, height);
     tempP.strength = (p as any)._targetStrength;
     p._idleDeg = undefined;
   } else {
@@ -37,7 +37,7 @@ export function aiAim(p: LauncherPlayer, groups: Group[], balls: Ball[], width: 
         (p as any)._targetGroup = near;
         (p as any)._targetStrength = 0.35 + Math.random() * 0.65;
       }
-      aimAt(tempP, near.x, near.y, width, height, twoPlayer);
+      aimAt(tempP, near.x, near.y, width, height);
       tempP.strength = (p as any)._targetStrength;
       p._idleDeg = undefined;
     } else {
