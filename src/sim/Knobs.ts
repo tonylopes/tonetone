@@ -298,7 +298,7 @@ const KNOB_SPECS = {
   },
 
   drone: {
-    group: 'audio', kind: 'range', min: 0, max: 1, step: 0.05, default: 0.55, wakesAudio: true, cosmetic: true,
+    group: 'audio', kind: 'range', min: 0, max: 1, step: 0.05, default: 0.25, wakesAudio: true, cosmetic: true,
     apply: v => { AudioStore.drone = v; applyDrone(); },
     format: v => (v === 0 ? 'off' : pct(v)),
     read: () => AudioStore.drone,
