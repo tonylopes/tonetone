@@ -133,6 +133,26 @@ simulation that no longer exists.
 Full guide: the [Simulation Harness](https://app.notion.com/p/3dfdc052afb1812e8a39e1bbf59cbf71)
 page in Notion.
 
+## Git: one branch, commit straight to it
+
+This project is worked on a **single branch**, the one already checked out —
+normally `main`. When asked to submit, commit and push there directly.
+
+- **Do not create feature branches, do not open pull requests, and do not merge
+  one branch into another.** Nothing needs a review branch to land here.
+- **Do not switch branches in the working tree.** There may be uncommitted work in
+  progress, and `git checkout` carries it onto the branch you move to. If a command
+  needs a pristine tree — checking what a merge really produced, for instance — use
+  `git worktree add --detach` into a temporary directory and remove it afterwards,
+  rather than switching branches or stashing in place.
+- **Never revert, stash or commit changes that are not yours.** Files here can
+  change between commands, because they are being edited at the same time. A
+  "clean tree" reading goes stale within seconds: re-check it immediately before
+  anything that depends on it.
+- **`npm run verify` is the gate.** With no pull request it is the only review step
+  between a change and the branch everything ships from, so it must be green, with
+  the simulation baseline unchanged, before you push.
+
 ## Conventions
 
 - TypeScript strict mode; `tsc --noEmit` type-checks `src/` and `scripts/`.
