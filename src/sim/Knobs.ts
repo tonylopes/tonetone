@@ -239,6 +239,14 @@ const KNOB_SPECS = {
     read: () => PhysicsConfig.MIN_BOOM,
   },
 
+  boomcut: {
+    group: 'audio', kind: 'range', min: 40, max: 300, step: 5, default: 160,
+    wakesAudio: true, cosmetic: true,
+    apply: v => { AudioStore.boomCut = v as number; },
+    format: v => Math.round(v as number) + 'Hz',
+    read: () => AudioStore.boomCut,
+  },
+
   latency: {
     group: 'audio', kind: 'range', min: 0, max: 0.2, step: 0.01, default: 0.05,
     wakesAudio: true, cosmetic: true,
@@ -579,7 +587,7 @@ export interface ConfigSnapshot {
   colors: number;
   specials: boolean;
   shotDecay: number;
-  audio: { volume: number; lockVol: number; breakVol: number; boomVol: number; clickVol: number; drone: number; haptics: number; latency: number };
+  audio: { volume: number; lockVol: number; breakVol: number; boomVol: number; clickVol: number; drone: number; haptics: number; latency: number; boomCut: number };
 }
 
 export function snapshotConfig(): ConfigSnapshot {
@@ -591,7 +599,7 @@ export function snapshotConfig(): ConfigSnapshot {
     audio: {
       volume: AudioStore.volume, lockVol: AudioStore.lockVol, breakVol: AudioStore.breakVol,
       boomVol: AudioStore.boomVol, clickVol: AudioStore.clickVol, drone: AudioStore.drone,
-      haptics: AudioStore.haptics, latency: AudioStore.latency,
+      haptics: AudioStore.haptics, latency: AudioStore.latency, boomCut: AudioStore.boomCut,
     },
   };
 }

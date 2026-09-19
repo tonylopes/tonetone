@@ -1,5 +1,5 @@
 import { AudioStore, BEAT, initAudio, applyGain, inKey } from '../audio/SynthEngine';
-import { BOND_VOICE, playNote, playSwoosh, playKnock, playCountdownTick, getBoomProps, boomPitches, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
+import { BOND_VOICE, KNOCK_MODES, KNOCK_RING, TICK_LEVEL, TICK_GO_LEVEL, playNote, playSwoosh, playKnock, playCountdownTick, getBoomProps, boomPitches, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
 import { clickHz, playBinauralClick } from '../audio/UiSounds';
 import { pitchOf } from '../audio/SoundEvents';
 import { COLORS } from '../game/Rules';
@@ -200,7 +200,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     name: 'Ball Collision Knock',
     category: 'Game FX',
     situation: 'Physical impact collision between two unbonded balls or against table boundaries',
-    getParamsText: () => `Tuned Wood Bar: each ball's colour note, 1 octave above its lock (modes × 1, 3, 6) + Noise Click | Dur: 0.12s | Vol: knocks (${Math.round(AudioStore.clickVol * 100)}%)`,
+    getParamsText: () => `Struck Piano String: each ball's colour note, 1 octave above its lock (harmonic partials ×${KNOCK_MODES.map(m => m.ratio.toFixed(2)).join(', ×')}, stretched sharp) + Hammer Thump | Ring: ${KNOCK_RING.toFixed(2)}s | Vol: knocks (${Math.round(AudioStore.clickVol * 100)}%)`,
     play: () => {
       initAudio();
       playKnock(0, 0.6, pitchOf(0), pitchOf(1), { ignoreOptionsGuard: true });
@@ -233,7 +233,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     name: 'Countdown Tick',
     category: 'System & UI',
     situation: 'Clock counting down each second at match start or final 10 seconds of match',
-    getParamsText: () => `High-Pitch Sine Beep: ${Math.round(inKey(1180))} Hz | Dur: 0.09s | Fixed Vol: 22%`,
+    getParamsText: () => `High-Pitch Sine Beep: ${Math.round(inKey(1180))} Hz | Dur: 0.09s | Level ${TICK_LEVEL} (fixed: no volume knob, no ducking)`,
     play: () => {
       initAudio();
       playCountdownTick({ ignoreOptionsGuard: true });
@@ -244,7 +244,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     name: 'Countdown GO! / Finish',
     category: 'System & UI',
     situation: 'Match start moment ("Start!") or match final timer end ("0")',
-    getParamsText: () => `High-Pitch Sine Beep: ${Math.round(inKey(1180))} Hz | Dur: 0.16s | Fixed Vol: 30%`,
+    getParamsText: () => `High-Pitch Sine Beep: ${Math.round(inKey(1180))} Hz | Dur: 0.16s | Level ${TICK_GO_LEVEL} (fixed: no volume knob, no ducking)`,
     play: () => {
       initAudio();
       playCountdownTick({ isGo: true, ignoreOptionsGuard: true });

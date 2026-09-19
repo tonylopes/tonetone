@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { playNote, playSwoosh, playKnock, getBoomProps, boomPitches, playBoom, playCountdownTick, playMagneticElectricSound, BOND_VOICE, BREAK_VOICE, SWOOSH_METAL_MODES, boomEchoSpec, getMagnetLockProps, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL, pickGameBoom, playRandomGameBoom, resetAttractBooms, getWhiteBlackBoomVol, boomVolumeRamp, BOOM_VOL_RAMP, WHITE_BLACK_VOL_RAMP, BOOM_TIER_COUNT } from '../../src/audio/Voices';
+import { playNote, playSwoosh, playKnock, getBoomProps, boomPitches, playBoom, playCountdownTick, playMagneticElectricSound, BOND_VOICE, BREAK_VOICE, KNOCK_MODES, KNOCK_RING, TICK_LEVEL, TICK_GO_LEVEL, SWOOSH_METAL_MODES, boomEchoSpec, getMagnetLockProps, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL, pickGameBoom, playRandomGameBoom, resetAttractBooms, getWhiteBlackBoomVol, boomVolumeRamp, BOOM_VOL_RAMP, WHITE_BLACK_VOL_RAMP, BOOM_TIER_COUNT } from '../../src/audio/Voices';
 import { AudioStore, BEAT, SCALE_NOTES, SCALE_ROOT, SCALE_STEPS, inKey } from '../../src/audio/SynthEngine';
 import { clickHz, playBinauralClick, resetUiSoundsForTesting, setClickLockMs } from '../../src/audio/UiSounds';
 
@@ -515,6 +515,33 @@ describe('Voices module', () => {
       expect(lockNote(relRed)).not.toBe(lockNote(relBlue));
       expect(fundamentals).toContain(lockNote(relRed) * 2);
       expect(fundamentals).toContain(lockNote(relBlue) * 2);
+    });
+
+    it('rings like a struck piano string, not a wooden bar', () => {
+      // A bar's modes are 1 : 3 : 6 and gone inside 90ms. A string's are the
+      // harmonic series, stretched a little sharp by its stiffness, with the
+      // fundamental ringing longest.
+      KNOCK_MODES.forEach((m, n) => {
+        const exact = n + 1;
+        expect(m.ratio, `partial ${exact}`).toBeGreaterThanOrEqual(exact);
+        expect(m.ratio, `partial ${exact}`).toBeLessThan(exact * 1.01);
+        if (n) {
+          expect(m.amp, `partial ${exact}`).toBeLessThan(KNOCK_MODES[n - 1].amp);
+          expect(m.decay, `partial ${exact}`).toBeLessThan(KNOCK_MODES[n - 1].decay);
+        }
+      });
+      expect(KNOCK_RING).toBe(KNOCK_MODES[0].decay);
+      // Long enough to be a note rather than a click, short enough that the most
+      // frequent voice in the game does not turn the table into mud.
+      expect(KNOCK_RING).toBeGreaterThan(0.25);
+      expect(KNOCK_RING).toBeLessThan(0.6);
+    });
+
+    it('keeps the countdown tick under the voices it plays over', () => {
+      // It bypasses the volume knobs and the ducking, and sits where the ear is
+      // most sensitive, so it carries further than its number suggests.
+      expect(TICK_LEVEL).toBeLessThan(0.03);
+      expect(TICK_GO_LEVEL).toBeGreaterThan(TICK_LEVEL);
     });
   });
 
@@ -1154,6 +1181,43 @@ describe('Voices module', () => {
           expect(pitches).toContain(inKey(f));
         }
       }
+    });
+
+    it('cuts the boom low end at the knob, in two stages, after the compressor', () => {
+      const filters: { type: string; freq: number }[] = [];
+      const node: any = () => ({
+        connect: () => {}, disconnect: () => {}, start: () => {}, stop: () => {},
+        gain: { value: 0, setValueAtTime: () => {}, linearRampToValueAtTime: () => {}, exponentialRampToValueAtTime: () => {}, cancelScheduledValues: () => {} },
+      });
+      const filter = () => {
+        const f: any = {
+          type: '', Q: { value: 1, setValueAtTime: () => {} },
+          frequency: { value: 0, setValueAtTime: (v: number) => { f.freq = v; }, linearRampToValueAtTime: () => {}, exponentialRampToValueAtTime: () => {} },
+          connect: () => {}, disconnect: () => {},
+        };
+        filters.push(f);
+        return f;
+      };
+      const osc = () => ({ ...node(), type: '', frequency: { value: 0, setValueAtTime: () => {}, linearRampToValueAtTime: () => {}, exponentialRampToValueAtTime: () => {} }, onended: null });
+      const ctx: any = {
+        currentTime: 0,
+        createGain: node, createOscillator: osc, createBiquadFilter: filter,
+        createDelay: () => ({ ...node(), delayTime: { setValueAtTime: () => {} } }),
+        createStereoPanner: () => ({ ...node(), pan: { setValueAtTime: () => {} } }),
+        createDynamicsCompressor: () => ({
+          ...node(),
+          threshold: { setValueAtTime: () => {} }, knee: { setValueAtTime: () => {} },
+          ratio: { setValueAtTime: () => {} }, attack: { setValueAtTime: () => {} }, release: { setValueAtTime: () => {} },
+        }),
+      };
+      AudioStore.actx = ctx;
+      AudioStore.master = node();
+      AudioStore.boomCut = 150;
+      playBoom(12, 0, { ignoreOptionsGuard: true });
+
+      const highpasses = filters.filter(f => f.type === 'highpass');
+      expect(highpasses.length).toBe(2);
+      for (const hp of highpasses) expect((hp as any).freq).toBe(150);
     });
 
     it('keeps the boom tiers distinct and rising', () => {

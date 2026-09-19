@@ -72,6 +72,16 @@ export interface AudioState {
   /** 1 = fire native haptics on sound events, 0 = silent. */
   haptics: number;
   /**
+   * Low cut on the boom bus, in Hz.
+   *
+   * A phone speaker cannot move enough air for the bottom of a boom's dive, and
+   * driving it there is heard as crackle — from Level 10-15 up on the ordinary
+   * boom, and from 5-10 on the lifted white-on-black one, on the speaker but
+   * never on headphones. This takes that energy out before it reaches any
+   * speaker. It is a knob so the level can be found on the phone itself.
+   */
+  boomCut: number;
+  /**
    * Requested output buffer size, in seconds; 0 leaves the choice to the browser.
    *
    * An AudioContext built with no options asks for `latencyHint: 'interactive'`,
@@ -106,6 +116,7 @@ export const AudioStore: AudioState = {
   clickVol: 0.5,
   drone: 1.0,
   haptics: 1,
+  boomCut: 160,
   latency: 0.05,
 };
 

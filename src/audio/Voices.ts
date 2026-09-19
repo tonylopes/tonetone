@@ -18,6 +18,17 @@ export const BOND_VOICE = {
 };
 
 /**
+ * The countdown tick's level, and the louder "Start!" / "0" blip's.
+ *
+ * Halved on 2026-09-19: the tick read as too loud in play. It is a bare sine
+ * near the ear's most sensitive band and deliberately bypasses both the
+ * per-event volume knobs and the load ducking, so it carries further than its
+ * number suggests beside the game's 110-400 Hz voices.
+ */
+export const TICK_LEVEL = 0.022;
+export const TICK_GO_LEVEL = 0.032;
+
+/**
  * High-pitch countdown tick — a short, bright beep that rings above normal
  * game sounds.  `isGo` switches to a triumphant rising double-blip for the
  * "Start!" / "0" moment.
@@ -34,7 +45,7 @@ export function playCountdownTick(opts: { isGo?: boolean; ignoreOptionsGuard?: b
   // 1180 Hz, near the ear's most sensitive band, and it bypasses both the
   // per-kind level knobs and the duck mixer, so it reads louder than its
   // amplitude suggests next to the game's 110-400 Hz voices.
-  const vol = isGo ? 0.065 : 0.045;
+  const vol = isGo ? TICK_GO_LEVEL : TICK_LEVEL;
   const freq = inKey(1180);              // bright, above the game palette, in key
   const dur = isGo ? 0.16 : 0.09;
 
@@ -437,7 +448,24 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, opts: BoomOpti
   const trim = actx.createGain();
   parts.push(trim);
   trim.gain.value = BOOM_OUTPUT * vol * AudioStore.boomVol;
-  comp.connect(trim);
+  // The low cut, between the compressor and the trim so the echo tap downstream
+  // carries the same shape. Two 12 dB/oct stages: one leaves too much of the
+  // octave below the cut for a phone speaker to cope with. Everything below it
+  // goes, including the 808 sub layer of the top tiers unless the knob is taken
+  // down to meet it.
+  const cut = Math.max(20, AudioStore.boomCut);
+  let lowCut: AudioNode = comp;
+  for (let stage = 0; stage < 2; stage++) {
+    const hp = actx.createBiquadFilter();
+    parts.push(hp);
+    hp.type = 'highpass';
+    hp.frequency.value = cut;
+    hp.frequency.setValueAtTime(cut, now);
+    hp.Q.setValueAtTime(0.7, now);
+    lowCut.connect(hp);
+    lowCut = hp;
+  }
+  lowCut.connect(trim);
   trim.connect(dest);
 
   // Echo network. It taps the boom post-trim, so the repeats carry the shape the
@@ -549,25 +577,11 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, opts: BoomOpti
   env.gain.linearRampToValueAtTime(0, t + dur + 0.04);
   env.connect(lp);
 
-  // For higher tiers (>= 15), add deep 808 sub-drop layer for dramatic cinematic weight
-  if (boomSize >= 15) {
-    const subOsc = actx.createOscillator();
-    const subGain = actx.createGain();
-    parts.push(subOsc, subGain);
-    subOsc.type = 'sine';
-    subOsc.frequency.setValueAtTime(startPitch * 0.5, t);
-    rampFreq(subOsc.frequency, endPitch * 0.5, t + dur);
-    subGain.gain.value = SILENCE;
-    subGain.gain.setValueAtTime(SILENCE, now);
-    subGain.gain.setValueAtTime(SILENCE, t);
-    subGain.gain.linearRampToValueAtTime(peak * 0.3, t + 0.02);
-    subGain.gain.linearRampToValueAtTime(SILENCE, t + dur);
-    subGain.gain.linearRampToValueAtTime(0, t + dur + 0.04);
-    subOsc.connect(subGain);
-    subGain.connect(lp);
-    subOsc.start(t);
-    subOsc.stop(t + dur + 0.05);
-  }
+  // The 808 sub layer the top tiers used to carry is gone. It ran an octave under
+  // the dive, 21-58 Hz, which is below the low cut and below what a phone can
+  // reproduce: inaudible there, and pure cone excursion — part of what made booms
+  // crackle. On headphones it was also fighting the dive it doubled, so taking it
+  // out *raised* the measured level of a 20+ boom rather than thinning it.
 
   // Left binaural channel oscillator with rapid pitch-drop sweep
   const leftOsc = actx.createOscillator();
@@ -1289,13 +1303,32 @@ export function playSwoosh(xNorm: number, force: number, opts: SwooshOptions = {
   };
 }
 
-// Resonances of a tuned wooden bar (xylophone modes 1:3:6), so a knock has a clear
-// pitch. Their fast, staggered decay is what still reads as wood-on-wood.
-const KNOCK_MODES = [
-  { ratio: 1, amp: 1.0, decay: 0.09 },
-  { ratio: 3, amp: 0.4, decay: 0.05 },
-  { ratio: 6, amp: 0.18, decay: 0.028 },
+/**
+ * The partials of a struck piano string, which is what a knock rings like since
+ * 2026-09-19. It was a tuned wooden bar before — modes at ×1, ×3 and ×6 decaying
+ * in 90 / 50 / 28 ms — and those odd, widely spaced ratios over a very short ring
+ * are exactly what read as wood.
+ *
+ * Three things make this a piano instead, and each matters:
+ * - **The harmonic series**, ×1 to ×5, rather than a bar's 1 : 3 : 6.
+ * - **Stretched sharp.** A real string is stiff, so its partials run above exact
+ *   multiples, by `n × sqrt(1 + B n²)` with B ≈ 4e-4 for a mid-range string. The
+ *   stretch is small — 9 cents at the fifth partial — and it is most of what
+ *   separates a piano from an organ.
+ * - **The fundamental rings longest**, 0.42s against the fifth partial's 0.05s.
+ *   The top of the sound decays away and leaves the note, which is the shape of
+ *   a struck string; the old bar had all three modes gone inside 90 ms.
+ */
+export const KNOCK_MODES = [
+  { ratio: 1.000, amp: 1.00, decay: 0.42 },
+  { ratio: 2.002, amp: 0.50, decay: 0.24 },
+  { ratio: 3.005, amp: 0.26, decay: 0.14 },
+  { ratio: 4.013, amp: 0.14, decay: 0.08 },
+  { ratio: 5.025, amp: 0.07, decay: 0.05 },
 ];
+
+/** The longest a knock rings: its fundamental. */
+export const KNOCK_RING = Math.max(...KNOCK_MODES.map(m => m.decay));
 
 // A ball's knock note: its colour's bond-lock scale degree, one octave up, so
 // collisions play in key with the locks and the drone.
@@ -1313,8 +1346,8 @@ function knockEnvelope(param: AudioParam, peak: number, now: number, t: number, 
 }
 
 /**
- * Ball-on-ball knock between two unbonded balls: a contact click over a short
- * wooden ring. Each ball rings its own colour's note (`rel` as for `playNote`),
+ * Ball-on-ball knock between two unbonded balls: a hammer thump over a struck
+ * piano string. Each ball rings its own colour's note (`rel` as for `playNote`),
  * so a collision is a two-note chord, the struck ball answering just after the
  * hitter. Harder hits are brighter, not higher, to stay in key.
  */
@@ -1330,8 +1363,10 @@ export function playKnock(xNorm: number, force: number, relHitter: number, relSt
   AudioStore.thudAt = now;
 
   // Sits well under the bond lock at equal sliders (the hardest knock ~8 dB below
-  // a mid-scale lock), since its bright click reads louder than the measured gap.
-  const peak = 0.085 * Math.max(0.15, normForce) * AudioStore.clickVol;
+  // a mid-scale lock), since its strike reads louder than the measured gap. Lower
+  // than the wooden bar's 0.085, because a ring of 0.42s carries far more energy
+  // than one of 0.09s at the same peak.
+  const peak = 0.07 * Math.max(0.15, normForce) * AudioStore.clickVol;
   if (peak < 0.001) return;
   // Tight 10ms lookahead for immediate audio response without JS frame-lag crackle
   const t = now + LOOKAHEAD.brief;
@@ -1342,7 +1377,7 @@ export function playKnock(xNorm: number, force: number, relHitter: number, relSt
   const notes = hitterF === struckF
     ? [{ f: hitterF, at: t, amp: 1 }]
     : [{ f: hitterF, at: t, amp: 0.7 }, { f: struckF, at: t + 0.018, amp: 0.7 }];
-  const end = t + 0.018 + KNOCK_MODES[0].decay + 0.03;
+  const end = t + 0.018 + KNOCK_RING + 0.03;
 
   const parts: any[] = [];
   let dest: AudioNode = AudioStore.master!;
@@ -1356,7 +1391,7 @@ export function playKnock(xNorm: number, force: number, relHitter: number, relSt
       osc.type = 'sine';
       osc.frequency.value = note.f * m.ratio;
       osc.frequency.setValueAtTime(note.f * m.ratio, now);
-      knockEnvelope(g.gain, peak * note.amp * m.amp * (i ? bright : 1), now, note.at, 0.0015, m.decay);
+      knockEnvelope(g.gain, peak * note.amp * m.amp * (i ? bright : 1), now, note.at, 0.003, m.decay);
       osc.connect(g);
       g.connect(dest);
       osc.start(note.at);
@@ -1364,17 +1399,18 @@ export function playKnock(xNorm: number, force: number, relHitter: number, relSt
     });
   }
 
-  // Contact click: a few milliseconds of band-passed noise above the modes.
+  // The hammer: a soft thump of band-passed noise rather than the bright contact
+  // click a wooden bar makes. On a piano the hammer is felt more than heard.
   const src = actx.createBufferSource();
   src.buffer = AudioStore.noiseBuf;
   src.loop = true;
-  src.playbackRate.value = 2.2;
+  src.playbackRate.value = 1.4;
   const cg = actx.createGain();
-  knockEnvelope(cg.gain, peak * 2.2 * bright, now, t, 0.0008, 0.012);
+  knockEnvelope(cg.gain, peak * 1.3 * bright, now, t, 0.0012, 0.022);
   const bp = actx.createBiquadFilter();
   bp.type = 'bandpass';
-  bp.Q.value = 0.9;
-  const clickFreq = Math.min(6000, Math.max(hitterF, struckF) * 3.2);
+  bp.Q.value = 0.7;
+  const clickFreq = Math.min(3600, Math.max(hitterF, struckF) * 2.0);
   bp.frequency.value = clickFreq;
   bp.frequency.setValueAtTime(clickFreq, now);
   parts.push(src, cg, bp);
