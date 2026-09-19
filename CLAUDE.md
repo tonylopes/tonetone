@@ -181,6 +181,11 @@ normally `main`. When asked to submit, commit and push there directly.
 
 - **Do not create feature branches, do not open pull requests, and do not merge
   one branch into another.** Nothing needs a review branch to land here.
+- **A session that starts in a worktree still works on `main`.** If a session
+  starts inside `.claude/worktrees/…` on a generated branch, that branch is not the
+  working branch — `main` is. Fast-forward the main checkout to each change once
+  `npm run verify` is green (its dev server is what gets tested), and never call a
+  change ready to try while it exists only on the worktree branch.
 - **Do not switch branches in the working tree.** There may be uncommitted work in
   progress, and `git checkout` carries it onto the branch you move to. If a command
   needs a pristine tree — checking what a merge really produced, for instance — use
