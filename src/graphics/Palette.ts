@@ -84,27 +84,33 @@ export const INK: Rgb = [0xf3, 0xe7, 0xff];
 export const FIELD_BG: Rgb = [0x14, 0x0a, 0x2b];
 
 /**
- * The two reds the aim arrow burns through once the throw would boom.
+ * The far end of the aim arrow's power ramp.
  *
- * The arrow is **white for every throw that will not boom**, so white is not a
- * colour on this ramp but the state before it: it says the shot is safe. The
- * moment the throw crosses `BOOM_SPEED` the arrow snaps to `AIM_WARN`, and from
- * there to full power it deepens to `AIM_HOT`. The snap is the threshold — a
- * `WHITE`-to-red jump of CIEDE2000 36.7, which is not something a player can
- * miss — and the deepening is how much power is behind it.
+ * The arrow is `WHITE` for every throw that will not boom, and from the boom
+ * threshold up it reddens towards this, reaching it at the hardest throw the
+ * bay can make. So most of a booming throw's range is a pale red — `#ffe7e7`
+ * just past the threshold, `#ff8787` at seven tenths — and pure red is reserved
+ * for full power.
  *
- * The two reds are only 12.0 apart, so the *hue* does little of that second
- * job; `drawAim` grows the glow with the same heat, which is what makes full
- * power read as hotter rather than merely redder. Keep them close: they are two
- * ends of one ramp, not two states to tell apart.
+ * Two earlier cuts on 2026-09-19 are worth knowing about, because each was
+ * wrong in a way the next one over-corrected:
  *
- * The arrow used to wear the player's own colour and turn `PINK` for both of
- * them at the threshold. That made cyan and pink mean a fourth thing — player,
- * launcher, and now power — and in a duel player 2's arrow was the boom colour
- * at every strength. Red belongs to nothing else on the table: `AIM_HOT` is
- * 39.2 from `PINK`, 63.7 from `CYAN` and 39.0 from its nearest ball, the gold.
+ * 1. The ramp ran across the range *below* the threshold and held flat red
+ *    above it, which put the whole colour change where nothing was at stake.
+ * 2. Turning it around, the arrow snapped to a coral `AIM_WARN` `#ff6b52` the
+ *    moment it booked, to mark the threshold — and that made the low end of
+ *    the booming range far too red. Tony: "it should be whiter near 0.4".
+ *
+ * So the snap is gone and the ramp starts at white. **The cost is that the boom
+ * threshold is no longer legible in the colour** — at strength 0.30 the arrow is
+ * 99% white, where the old pink switch made that moment unmistakable. If it has
+ * to come back, the glow is the free channel: `drawAim` already grows it with
+ * the same heat, and it could start at the threshold instead of rising from the
+ * arrow's base glow.
+ *
+ * Red belongs to nothing else on the table: this is CIEDE2000 39.2 from `PINK`,
+ * 63.7 from `CYAN`, and 39.0 from its nearest ball, the gold.
  */
-export const AIM_WARN: Rgb = [0xff, 0x6b, 0x52];
 export const AIM_HOT: Rgb = [0xff, 0x00, 0x00];
 
 // ── Menu ───────────────────────────────────────────────────────────────────

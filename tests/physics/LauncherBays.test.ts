@@ -9,7 +9,6 @@ import {
   aimAt,
   throwSpeedOf,
   boomHeatOf,
-  boomsOnImpact,
   launchSpeedOf,
   mouthNormalAt,
   clearExempt,
@@ -205,18 +204,18 @@ describe('LauncherBays module', () => {
     });
   });
 
-  describe('boomHeatOf and boomsOnImpact', () => {
+  describe('boomHeatOf', () => {
     it('stays 0 for every throw that will not boom, and reaches 1 at full power', () => {
       const p = makeLauncher(1);
 
       p.strength = 0;
-      expect(boomsOnImpact(p, false)).toBe(false);
+      expect((launchSpeedOf(p, false) >= PhysicsConfig.BOOM_SPEED)).toBe(false);
       expect(boomHeatOf(p, false)).toBe(0);
 
       // Full power is the hardest throw the bay can make, so it is the top of
       // the ramp by definition.
       p.strength = 1;
-      expect(boomsOnImpact(p, false)).toBe(true);
+      expect((launchSpeedOf(p, false) >= PhysicsConfig.BOOM_SPEED)).toBe(true);
       expect(boomHeatOf(p, false)).toBe(1);
     });
 
@@ -230,7 +229,7 @@ describe('LauncherBays module', () => {
       for (let s = 0; s <= 1.0001; s += 0.01) {
         p.strength = Math.min(1, s);
         const heat = boomHeatOf(p, false);
-        if (!boomsOnImpact(p, false)) {
+        if (!(launchSpeedOf(p, false) >= PhysicsConfig.BOOM_SPEED)) {
           expect(heat).toBe(0);
         } else {
           expect(heat).toBeGreaterThanOrEqual(lastHeat);
@@ -249,7 +248,7 @@ describe('LauncherBays module', () => {
       // should be neither 0 nor 1.
       const p = makeLauncher(1);
       p.strength = 0.65;
-      expect(boomsOnImpact(p, false)).toBe(true);
+      expect((launchSpeedOf(p, false) >= PhysicsConfig.BOOM_SPEED)).toBe(true);
       const mid = boomHeatOf(p, false);
       expect(mid).toBeGreaterThan(0.05);
       expect(mid).toBeLessThan(0.95);
@@ -267,7 +266,7 @@ describe('LauncherBays module', () => {
         PhysicsConfig.KICK = 1.2;
         for (let s = 0; s <= 1; s += 0.01) {
           p.strength = s;
-          expect(boomsOnImpact(p, false)).toBe(
+          expect((launchSpeedOf(p, false) >= PhysicsConfig.BOOM_SPEED)).toBe(
             throwSpeedOf(p, false) * PhysicsConfig.KICK >= PhysicsConfig.BOOM_SPEED
           );
         }
@@ -294,7 +293,7 @@ describe('LauncherBays module', () => {
         recalcThresholds(620);
         const p = makeLauncher(1);
         p.strength = 1;
-        expect(boomsOnImpact(p, false)).toBe(false);
+        expect((launchSpeedOf(p, false) >= PhysicsConfig.BOOM_SPEED)).toBe(false);
         expect(boomHeatOf(p, false)).toBe(0);
       } finally {
         PhysicsConfig.BOOM_AT = before.at;

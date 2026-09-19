@@ -3,11 +3,11 @@ import { PhysicsConfig, recalcThresholds } from '../physics/Config';
 import { uiFont } from './Fonts';
 import { ballSprite, inkOn, SP_R, SPRITE } from './Sprites';
 import { BG_SCALE, FIELD_RING, FLASH_SPECS, RESULTS_RING, drawLiquid, drawRippleRing } from './VisualFX';
-import { AIM_HOT, AIM_WARN, BLACK_HEX, CYAN, FIELD_BG, MENU_CYAN, PINK, Rgb, VOID, WHITE, WHITE_HEX, hex, mix, rgba } from './Palette';
+import { AIM_HOT, BLACK_HEX, CYAN, FIELD_BG, MENU_CYAN, PINK, Rgb, VOID, WHITE, WHITE_HEX, hex, mix, rgba } from './Palette';
 import { FLASH_LIFE, POP_LIFE } from '../physics/Types';
 import { setHidden } from '../ui/Dom';
 import { popText } from './PopText';
-import { aimDirOf, aimReachOf, boomHeatOf, boomsOnImpact, launchPointOf, mouthRadius } from '../physics/LauncherBays';
+import { aimDirOf, aimReachOf, boomHeatOf, launchPointOf, mouthRadius } from '../physics/LauncherBays';
 import { LauncherPlayer } from '../physics/Types';
 import { kindLabel } from '../game/Rules';
 import { TAU } from '../math';
@@ -457,16 +457,14 @@ function drawAim(
   const dir = aimDirOf(p);
   const reach = aimReachOf(p, W, H, game.twoPlayer);
   const fade = ready ? 1 : 0.35;
-  // White for every throw that will not boom, red for every throw that will,
-  // deepening to `AIM_HOT` at full power. The arrow marked the same threshold
-  // before, by switching from the player's colour to pink; the difference is
-  // that the range which now carries a ramp is the one a player chooses inside
-  // — how hard to boom — rather than the range where nothing happens either
-  // way. No `LauncherPaint` reaches this function any more: it is the same
-  // arrow for both players, told apart by which bay it grows out of.
-  const hot = boomsOnImpact(p, game.twoPlayer);
+  // White for every throw that will not boom, then reddening the whole way from
+  // the boom threshold to full power — `boomHeatOf` is 0 over the first range
+  // and climbs across the second, so the ramp is spent on the throws a player
+  // is choosing between rather than on the ones that all land the same. No
+  // `LauncherPaint` reaches this function any more: it is the same arrow for
+  // both players, told apart by which bay it grows out of.
   const heat = boomHeatOf(p, game.twoPlayer);
-  const aimRgb = hot ? mix(AIM_WARN, AIM_HOT, heat) : WHITE;
+  const aimRgb = mix(WHITE, AIM_HOT, heat);
   const aimColor = rgba(aimRgb, +((0.65 + 0.35 * p.strength) * fade).toFixed(3));
 
   const g: AimGeometry = {

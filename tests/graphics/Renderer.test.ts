@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { drawPops, drawOneLauncher, popCenterX, POP_EDGE_PAD, RenderContext, P_COLOR } from '../../src/graphics/Renderer';
-import { AIM_HOT, AIM_WARN, CYAN, PINK, VOID, WHITE, rgba } from '../../src/graphics/Palette';
+import { AIM_HOT, CYAN, PINK, VOID, WHITE, rgba } from '../../src/graphics/Palette';
 import { recalcThresholds } from '../../src/physics/Config';
 import { restoreConfig, snapshotConfig } from '../../src/sim/Knobs';
 import { createGame } from '../../src/game/GameState';
@@ -196,18 +196,20 @@ describe('Renderer module - drawOneLauncher aim arrow & dotted line', () => {
   beforeEach(() => recalcThresholds(600));
   afterEach(() => restoreConfig(snap));
 
-  it('stays white for every throw that will not boom, and turns red for every throw that will', () => {
-    // White is the state before the ramp, not a colour on it: it says the shot
-    // is safe, and it says so over the whole range where that is true.
+  it('stays white for every throw that will not boom, and is still nearly white just past it', () => {
+    // White is the state before the ramp: it says the shot is safe, and it says
+    // so over the whole range where that is true.
     for (const strength of [0, 0.1, 0.2]) {
       expect(channels(drawArrow(strength).shaft), 'strength ' + strength).toEqual([...WHITE]);
     }
-    for (const strength of [0.5, 0.8, 1]) {
-      const [r, g, b] = channels(drawArrow(strength).shaft);
-      expect(r, 'strength ' + strength).toBe(255);
-      expect(g, 'strength ' + strength).toBeLessThanOrEqual(AIM_WARN[1]);
-      expect(b, 'strength ' + strength).toBeLessThanOrEqual(AIM_WARN[2]);
-    }
+
+    // And the ramp starts *at* white rather than jumping into red at the
+    // threshold. A coral snap there was the second cut of this arrow, and the
+    // low end of the booming range came out far too red.
+    const [r, g, b] = channels(drawArrow(0.4).shaft);
+    expect(r).toBe(255);
+    expect(g).toBeGreaterThan(200);
+    expect(b).toBeGreaterThan(200);
   });
 
   it('keeps deepening across the booming range and reaches AIM_HOT at full power', () => {

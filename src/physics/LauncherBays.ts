@@ -92,28 +92,22 @@ export function launchSpeedOf(p: LauncherPlayer, twoPlayer?: boolean): number {
   return throwSpeedOf(p, twoPlayer) * PhysicsConfig.KICK;
 }
 
-/** True when the throw as aimed would boom the group it hits. */
-export function boomsOnImpact(p: LauncherPlayer, twoPlayer?: boolean): boolean {
-  return launchSpeedOf(p, twoPlayer) >= PhysicsConfig.BOOM_SPEED;
-}
-
 /**
  * How far past the boom threshold a throw is: 0 the moment it starts booming,
  * 1 at the hardest throw the bay can make, and 0 for anything that will not
  * boom at all.
  *
- * This is the aim arrow's colour above the threshold. The arrow is white while
- * `boomsOnImpact` is false — white meaning the shot is safe, over the whole
- * range where it is safe — and red from the threshold up, deepening with this
- * heat to full red at full power.
+ * This is the aim arrow's colour: `WHITE` at 0 and through the whole safe
+ * range, reddening towards `AIM_HOT` as this climbs, pure red at 1. So the
+ * arrow is white for as long as the throw cannot boom, and the ramp is spent
+ * entirely on the throws a player is choosing between.
  *
  * **It was the other way round for a few hours on 2026-09-19**, ramping white
  * to red over the range *below* the threshold and holding red above it. That
  * put the whole colour change in the first third of the drag and left the top
- * two thirds — every throw that actually booms, which is the half of the range
- * a player is choosing between — at one flat red. Tony asked for the opposite:
- * white for as long as the throw will not boom, and the red still climbing at
- * maximum strength.
+ * two thirds — every throw that actually booms — at one flat red. Tony asked
+ * for the opposite: white for as long as the throw will not boom, and the red
+ * still climbing at maximum strength.
  *
  * Both ends move with the knobs, so both are read fresh each time: `boom` and
  * `maxpower` set `BOOM_SPEED`, `maxpower` and `kick` set the ceiling. If a knob
