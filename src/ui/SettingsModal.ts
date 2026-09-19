@@ -57,7 +57,12 @@ export function setupSettingsKnobs(
     };
     runners[def.id] = run;
 
-    el.addEventListener('input', () => {
+    // A slider reports every step on `input`; a `<select>` reports a pick on
+    // `change`, which every browser fires, where `input` on a select is not
+    // universal. Listening for `input` alone left the scale picker a no-op
+    // wherever a select does not fire it.
+    const pickEvent = el.type.startsWith('select') ? 'change' : 'input';
+    el.addEventListener(pickEvent, () => {
       if (def.wakesAudio) initAudio();
       run();
       reportPresetState();
