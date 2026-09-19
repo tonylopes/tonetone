@@ -4,7 +4,7 @@ import { drawFor, randomKind, colorOfKind } from './Rules';
 import { BLACK_HEX, WHITE_HEX } from '../graphics/Palette';
 import { rebuildGroups } from '../physics/RigidBody';
 import { aimDirOf, launchPointOf, throwSpeedOf } from '../physics/LauncherBays';
-import { playThud } from '../audio/Voices';
+import { playSwoosh } from '../audio/Voices';
 import { panOf } from '../audio/SoundEvents';
 import { CollisionState } from '../physics/CollisionSolver';
 import { stopAllVoices } from '../audio/SynthEngine';
@@ -370,7 +370,7 @@ export function throwBall(p: LauncherPlayer, game: Game, width: number, height: 
   p.nextUp = p.then || drawFor(p, game.players, game.twoPlayer);
   p.then = drawFor(p, game.players, game.twoPlayer);
 
-  playThud(panOf(spot.x, width), speed / (PhysicsConfig.THROW_MAX * 1.4), false, isWhite);
+  playSwoosh(panOf(spot.x, width), speed / (PhysicsConfig.THROW_MAX * 1.4), { isWhite });
   p.reload = game.reloadTime;
 
   if (!game.matchRunning && !game.matchOver) {

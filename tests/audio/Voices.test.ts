@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { playNote, playThud, playKnock, getBoomProps, playBoom, playMagneticElectricSound, BOND_VOICE, SWOOSH_METAL_MODES, boomEchoSpec, getMagnetLockProps, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL, pickGameBoom, playRandomGameBoom, resetAttractBooms, getWhiteBlackBoomVol, boomVolumeRamp, BOOM_VOL_RAMP, WHITE_BLACK_VOL_RAMP, BOOM_TIER_COUNT } from '../../src/audio/Voices';
+import { playNote, playSwoosh, playKnock, getBoomProps, playBoom, playMagneticElectricSound, BOND_VOICE, SWOOSH_METAL_MODES, boomEchoSpec, getMagnetLockProps, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL, pickGameBoom, playRandomGameBoom, resetAttractBooms, getWhiteBlackBoomVol, boomVolumeRamp, BOOM_VOL_RAMP, WHITE_BLACK_VOL_RAMP, BOOM_TIER_COUNT } from '../../src/audio/Voices';
 import { AudioStore, BEAT } from '../../src/audio/SynthEngine';
 
 describe('Voices module', () => {
@@ -55,7 +55,7 @@ describe('Voices module', () => {
       AudioStore.master = {} as any;
       AudioStore.noiseBuf = {} as any;
 
-      playMagneticElectricSound(0, true);
+      playMagneticElectricSound(0, { ignoreOptionsGuard: true });
 
       expect(mockCtx.createGain).toHaveBeenCalled();
       expect(mockCtx.createBiquadFilter).toHaveBeenCalled();
@@ -137,7 +137,7 @@ describe('Voices module', () => {
       AudioStore.wetBus = null;
       AudioStore.thuds = 0;
       AudioStore.swooshAt = -9;
-      playThud(xNorm, 0.8, true, true);
+      playSwoosh(xNorm, 0.8, { ignoreOptionsGuard: true, isWhite: true });
       for (const call of (mockCtx.createStereoPanner as any).mock.results) {
         pans.push(call.value.pan.value);
       }
@@ -346,7 +346,7 @@ describe('Voices module', () => {
         AudioStore.master = {} as any;
         AudioStore.wetBus = null;
         AudioStore.boomVol = 1.0;
-        playBoom(boomSize, 0, true);
+        playBoom(boomSize, 0, { ignoreOptionsGuard: true });
         // The trim is the one gain whose value is set outright rather than ramped.
         const trim = gains.find((g) => g.value !== 1 && g.value !== 0.0001);
         return { trim: trim ? trim.value : 0, envPeak: Math.max(...envPeaks) };
@@ -427,7 +427,7 @@ describe('Voices module', () => {
     });
   });
 
-  describe('playThud micro-vibration filtering', () => {
+  describe('playSwoosh micro-vibration filtering', () => {
     it('ignores tiny forces (normForce < 0.03) for hit thuds to prevent idle crackling', () => {
       // Mock AudioContext
       const mockGainNode = {
@@ -601,7 +601,7 @@ describe('Voices module', () => {
       AudioStore.master = {} as any;
       AudioStore.noiseBuf = {} as any;
       AudioStore.activeVoices = 0;
-      playMagneticElectricSound(0, true, isPair);
+      playMagneticElectricSound(0, { ignoreOptionsGuard: true, isPair });
       return freqs;
     }
 
@@ -669,7 +669,7 @@ describe('Voices module', () => {
       };
       AudioStore.actx = mockCtx as any;
       AudioStore.master = {} as any;
-      playBoom(7, 0, true, whiteBlack);
+      playBoom(7, 0, { ignoreOptionsGuard: true, whiteBlack });
       return { starts, oscCount };
     }
 
@@ -779,7 +779,7 @@ describe('Voices module', () => {
       AudioStore.master = {} as any;
       AudioStore.wetBus = null;
 
-      playBoom(12, 0, true);
+      playBoom(12, 0, { ignoreOptionsGuard: true });
 
       expect(delays.length).toBe(2);
       const spec = boomEchoSpec(12, false);
@@ -895,7 +895,7 @@ describe('Voices module', () => {
         AudioStore.noiseBuf = {} as any;
         AudioStore.wetBus = null;
         AudioStore.activeVoices = 0;
-        playMagneticElectricSound(0, true, false, groupSize);
+        playMagneticElectricSound(0, { ignoreOptionsGuard: true, groupSize });
         return { drive: Math.max(...modGains), peakRamp: Math.max(...subRamps) };
       }
 
@@ -957,7 +957,7 @@ describe('Voices module', () => {
       AudioStore.thuds = 0;
       AudioStore.swooshAt = -9;
 
-      playThud(0, 0.8, true, true);
+      playSwoosh(0, 0.8, { ignoreOptionsGuard: true, isWhite: true });
 
       // Two noise sources: the one driving the banks, and the onset scrape.
       expect(mockCtx.createBufferSource).toHaveBeenCalledTimes(2);
@@ -1057,12 +1057,12 @@ describe('Voices module', () => {
       resetAttractBooms();
 
       // Ten in a row at the same instant: a runaway caller.
-      for (let i = 0; i < 10; i++) playRandomGameBoom(0, 'celebration', true);
+      for (let i = 0; i < 10; i++) playRandomGameBoom(0, 'celebration', { ignoreOptionsGuard: true });
       expect(booms).toBe(3);
 
       // Once the tails have run out, booms are allowed again.
       (mockCtx as any).currentTime = 30;
-      playRandomGameBoom(0, 'celebration', true);
+      playRandomGameBoom(0, 'celebration', { ignoreOptionsGuard: true });
       expect(booms).toBe(4);
     });
   });

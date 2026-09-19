@@ -14,7 +14,7 @@ import { launchPointOf } from '../../src/physics/LauncherBays';
 import { LauncherPlayer, Ball, Group } from '../../src/physics/Types';
 import { collide, boomGroup } from '../../src/physics/CollisionSolver';
 import { makeGroup } from '../../src/physics/RigidBody';
-import { playNote, playThud } from '../../src/audio/Voices';
+import { playNote, playSwoosh } from '../../src/audio/Voices';
 import { AudioStore } from '../../src/audio/SynthEngine';
 
 describe('Bug Detection Test Suite', () => {

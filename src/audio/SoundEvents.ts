@@ -14,7 +14,7 @@
  */
 import { SoundEvent } from '../physics/Types';
 import { BALL_COLORS } from '../graphics/Palette';
-import { playNote, playKnock, playMagneticElectricSound } from './Voices';
+import { playBoom, playNote, playKnock, playMagneticElectricSound } from './Voices';
 
 /** The knock force that maps to full loudness. Harder hits are clamped to it. */
 export const KNOCK_FULL_SCALE_FORCE = 380;
@@ -42,24 +42,16 @@ export function pitchOf(kind: number): number {
   return kind < 0 ? 0.5 : kind / BALL_COLORS.length;
 }
 
-/**
- * The loudness boost a boom of `size` balls asks for.
- *
- * Note that `playNote` forwards a 'boom' straight to `playBoom` and reads neither
- * this nor the pitch, so both are currently discarded. They are still passed, so
- * that this stays true by inspection of one call rather than by assumption.
- */
-export function boomBoost(size: number): number {
-  return Math.min(1.6, 0.7 + size * 0.09);
-}
-
 /** Play every sound the frame recorded, then empty the list. */
 export function playSoundEvents(sounds: SoundEvent[], width: number): void {
   for (const s of sounds) {
     const pan = panOf(s.x, width);
     switch (s.type) {
       case 'boom':
-        playNote(pitchOf(s.kind), pan, 'boom', boomBoost(s.size), s.size, false, s.whiteBlack);
+        // Straight to `playBoom`, not through `playNote`. The boom path there
+        // reads neither a scale degree nor a boost, so routing through it meant
+        // computing both on the belief that they mattered.
+        playBoom(s.size, pan, { whiteBlack: s.whiteBlack });
         break;
       case 'peel':
         playNote(pitchOf(s.kind), pan, 'break');
@@ -76,7 +68,7 @@ export function playSoundEvents(sounds: SoundEvent[], width: number): void {
         );
         break;
       case 'magnetLock':
-        playMagneticElectricSound(pan, false, s.bothBlack, s.size);
+        playMagneticElectricSound(pan, { isPair: s.bothBlack, groupSize: s.size });
         break;
     }
   }

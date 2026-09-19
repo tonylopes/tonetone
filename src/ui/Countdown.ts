@@ -57,7 +57,7 @@ function setCdText(game: Game, text: string, cls: 'start' | 'go' | 'end') {
       el.textContent = text;
       // Play countdown tick once per text change (only on the first element to avoid double-fire)
       if (el === els[0]) {
-        playCountdownTick(cls === 'go' || (cls === 'end' && text === '0'));
+        playCountdownTick({ isGo: cls === 'go' || (cls === 'end' && text === '0') });
       }
     }
   }

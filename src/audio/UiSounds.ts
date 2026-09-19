@@ -1,4 +1,4 @@
-import { AudioStore, BEAT, initAudio, isOptionsOpen } from './SynthEngine';
+import { AudioStore, BEAT, SILENCE, initAudio, isOptionsOpen } from './SynthEngine';
 
 /**
  * The interface's own voice: the binaural click every button makes.
@@ -20,6 +20,16 @@ export const CLICK_CANCEL_HZ = 261.63;
 export const CLICK_SELECT_HZ = 293.66;
 
 const CLICK_SECONDS = 0.16;
+
+/**
+ * How far ahead the click schedules itself, in seconds.
+ *
+ * The longest look-ahead of any voice. A click fires straight off a pointer
+ * event, which is the moment the main thread is busiest — laying out whatever
+ * the press just changed — so it needs the most headroom before the audio
+ * thread's next render quantum.
+ */
+const CLICK_LOOKAHEAD = 0.025;
 
 /**
  * How long the click refuses to fire again.
@@ -140,7 +150,7 @@ export function playBinauralClick(
     lpFilter.Q.setValueAtTime(0.5, now);
     lpFilter.connect(dest);
 
-    const pTime = now + 0.025; // 25ms lookahead to prevent JS rendering quantum lag crackling
+    const pTime = now + CLICK_LOOKAHEAD;
     const dur = Math.max(0.08, duration);
     const stopTime = pTime + dur + 0.04;
 
@@ -150,9 +160,9 @@ export function playBinauralClick(
     nodesToClean.push(subOsc, subGain);
     subOsc.type = 'sine';
     subOsc.frequency.setValueAtTime(targetFreq * 0.5, pTime);
-    subGain.gain.value = 0.0001;
-    subGain.gain.setValueAtTime(0.0001, now);
-    subGain.gain.setValueAtTime(0.0001, pTime);
+    subGain.gain.value = SILENCE;
+    subGain.gain.setValueAtTime(SILENCE, now);
+    subGain.gain.setValueAtTime(SILENCE, pTime);
     subGain.gain.linearRampToValueAtTime(baseVol * 0.35, pTime + 0.015);
     subGain.gain.linearRampToValueAtTime(0, pTime + dur);
     subOsc.connect(subGain);
@@ -169,9 +179,9 @@ export function playBinauralClick(
     leftOsc.type = 'sine';
     leftOsc.frequency.setValueAtTime(leftFreq, pTime);
 
-    leftGain.gain.value = 0.0001;
-    leftGain.gain.setValueAtTime(0.0001, now);
-    leftGain.gain.setValueAtTime(0.0001, pTime);
+    leftGain.gain.value = SILENCE;
+    leftGain.gain.setValueAtTime(SILENCE, now);
+    leftGain.gain.setValueAtTime(SILENCE, pTime);
     leftGain.gain.linearRampToValueAtTime(baseVol, pTime + 0.015);
     leftGain.gain.linearRampToValueAtTime(0, pTime + dur);
 
@@ -199,9 +209,9 @@ export function playBinauralClick(
     rightOsc.type = 'sine';
     rightOsc.frequency.setValueAtTime(rightFreq, pTime);
 
-    rightGain.gain.value = 0.0001;
-    rightGain.gain.setValueAtTime(0.0001, now);
-    rightGain.gain.setValueAtTime(0.0001, pTime);
+    rightGain.gain.value = SILENCE;
+    rightGain.gain.setValueAtTime(SILENCE, now);
+    rightGain.gain.setValueAtTime(SILENCE, pTime);
     rightGain.gain.linearRampToValueAtTime(baseVol * 0.95, pTime + 0.015);
     rightGain.gain.linearRampToValueAtTime(0, pTime + dur);
 

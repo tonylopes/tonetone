@@ -1,4 +1,4 @@
-import { AudioStore, BEAT, isOptionsOpen, loadAt_, MAX_THUDS, MAX_VOICES, triggerHaptic } from './SynthEngine';
+import { AudioStore, BEAT, SILENCE, isOptionsOpen, loadAt_, MAX_THUDS, MAX_VOICES, triggerHaptic } from './SynthEngine';
 import { boomTierOf, BOOM_TIER_COUNT as RULES_BOOM_TIER_COUNT } from '../game/Rules';
 
 export const BREAK_VOICE = {
@@ -16,13 +16,13 @@ export const BOND_VOICE = {
  * game sounds.  `isGo` switches to a triumphant rising double-blip for the
  * "Start!" / "0" moment.
  */
-export function playCountdownTick(isGo: boolean = false, ignoreOptionsGuard: boolean = false) {
-  if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.master) return;
-  if (!ignoreOptionsGuard && isOptionsOpen()) return;
-  const actx = AudioStore.actx;
+export function playCountdownTick(opts: { isGo?: boolean; ignoreOptionsGuard?: boolean } = {}) {
+  const { isGo = false, ignoreOptionsGuard = false } = opts;
+  if (!voiceAllowed(ignoreOptionsGuard)) return;
+  const actx = AudioStore.actx!;
   const now = actx.currentTime;
-  const t = now + 0.012;                 // tiny lookahead
-  const dest = AudioStore.master;
+  const t = now + LOOKAHEAD.short;
+  const dest = AudioStore.master!;
 
   // Sits at the top of the mix without towering over it: this is a bare sine at
   // 1180 Hz, near the ear's most sensitive band, and it bypasses both the
@@ -41,12 +41,12 @@ export function playCountdownTick(isGo: boolean = false, ignoreOptionsGuard: boo
   osc.type = 'sine';
   osc.frequency.setValueAtTime(freq, t);
 
-  env.gain.value = 0.0001;
-  env.gain.setValueAtTime(0.0001, now);
-  env.gain.setValueAtTime(0.0001, t);
+  env.gain.value = SILENCE;
+  env.gain.setValueAtTime(SILENCE, now);
+  env.gain.setValueAtTime(SILENCE, t);
   env.gain.linearRampToValueAtTime(vol, t + 0.006);
   env.gain.linearRampToValueAtTime(vol * 0.6, t + dur * 0.5);
-  env.gain.linearRampToValueAtTime(0.0001, t + dur);
+  env.gain.linearRampToValueAtTime(SILENCE, t + dur);
   env.gain.linearRampToValueAtTime(0, t + dur + 0.02);
 
   osc.connect(env);
@@ -60,11 +60,11 @@ export function playCountdownTick(isGo: boolean = false, ignoreOptionsGuard: boo
   parts.push(h, hg);
   h.type = 'sine';
   h.frequency.setValueAtTime(freq * 2.0, t);
-  hg.gain.value = 0.0001;
-  hg.gain.setValueAtTime(0.0001, now);
-  hg.gain.setValueAtTime(0.0001, t);
+  hg.gain.value = SILENCE;
+  hg.gain.setValueAtTime(SILENCE, now);
+  hg.gain.setValueAtTime(SILENCE, t);
   hg.gain.linearRampToValueAtTime(vol * 0.22, t + 0.006);
-  hg.gain.linearRampToValueAtTime(0.0001, t + dur * 0.65);
+  hg.gain.linearRampToValueAtTime(SILENCE, t + dur * 0.65);
   hg.gain.linearRampToValueAtTime(0, t + dur + 0.02);
   h.connect(hg);
   hg.connect(dest);
@@ -74,12 +74,139 @@ export function playCountdownTick(isGo: boolean = false, ignoreOptionsGuard: boo
   // Haptic feedback
   triggerHaptic(isGo ? 'heavy' : 'medium');
 
-  osc.onended = () => {
-    for (const n of parts) { try { n.disconnect(); } catch (_) {} }
+  disposeWhenEnded(osc, parts);
+}
+
+
+/**
+ * How far ahead a voice schedules itself, in seconds.
+ *
+ * Nothing is ever started at `currentTime`: the audio thread renders in
+ * 128-sample quanta, and a node started inside the quantum already in flight
+ * begins part-way through it, which is heard as a click. These seven values were
+ * written inline and differ from each other with no reason recorded, so they are
+ * named rather than unified — unifying them is a listening decision, not a
+ * refactoring one.
+ */
+const LOOKAHEAD = {
+  /** The countdown tick and the magnet lock: short, bright, want to feel immediate. */
+  short: 0.012,
+  /** Swooshes and knocks, the most frequent voices. */
+  brief: 0.010,
+  /** The boom, which is scheduled once and rings for seconds. */
+  boom: 0.015,
+  /** Notes, which also queue behind `AudioStore.cursor`. */
+  note: 0.03,
+};
+
+/** Every node a voice built, so one `onended` can take the whole graph down. */
+type VoiceParts = (AudioNode & { stop?: () => void })[];
+
+/**
+ * May this voice play at all?
+ *
+ * Every voice opened with the same two lines: sound off or no audio graph means
+ * silence, and the tuning panel being open means silence unless the caller is
+ * the sound tester, which is inside the panel and must be heard.
+ *
+ * `needs` names the extra pieces a voice cannot work without — the noise buffer
+ * for anything with a transient, and the per-kind volume knob where one gates
+ * the voice entirely.
+ */
+function voiceAllowed(ignoreOptionsGuard: boolean, needs: { noise?: boolean; vol?: number } = {}): boolean {
+  if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.master) return false;
+  if (!ignoreOptionsGuard && isOptionsOpen()) return false;
+  if (needs.noise && !AudioStore.noiseBuf) return false;
+  if (needs.vol !== undefined && needs.vol <= 0) return false;
+  return true;
+}
+
+/**
+ * Disconnect every node the voice built, once the node driving its lifetime ends.
+ *
+ * A voice that leaves its nodes connected leaks them: the graph keeps them
+ * alive, and on a phone a few hundred of those is the difference between clean
+ * audio and crackle. `also` runs first, for the voices that keep a count.
+ */
+function disposeWhenEnded(driver: AudioScheduledSourceNode, parts: VoiceParts, also?: () => void) {
+  driver.onended = () => {
+    if (also) also();
+    for (const n of parts) { try { n.disconnect(); } catch (e) {} }
     parts.length = 0;
   };
 }
 
+/**
+ * Route `from` into `to` through a stereo panner.
+ *
+ * `createStereoPanner` is absent on old WebViews, and every one of these sites
+ * wrote the same fallback out: without a panner the voice connects straight
+ * through and loses only its position, not its sound.
+ */
+function panned(from: AudioNode, to: AudioNode, pan: number, t: number | undefined, parts: VoiceParts) {
+  const actx = AudioStore.actx!;
+  if (actx.createStereoPanner) {
+    const p = actx.createStereoPanner();
+    parts.push(p);
+    // Some voices place the pan once and some schedule it; both are kept, because
+    // `.value` and `setValueAtTime` are not the same call on an AudioParam.
+    if (t === undefined) p.pan.value = pan;
+    else p.pan.setValueAtTime(pan, t);
+    from.connect(p);
+    p.connect(to);
+  } else {
+    from.connect(to);
+  }
+}
+
+/**
+ * Put a panner in front of `dest` and return what later nodes should connect to.
+ *
+ * The other half of the same fallback, for the voices that build a side and then
+ * hang several nodes off it. Returns `dest` unchanged where there is no panner.
+ */
+function panInto(dest: AudioNode, pan: number, parts: VoiceParts): AudioNode {
+  const actx = AudioStore.actx!;
+  if (!actx.createStereoPanner) return dest;
+  const p = actx.createStereoPanner();
+  parts.push(p);
+  p.pan.value = pan;
+  p.connect(dest);
+  return p;
+}
+
+/** Everything but the size and the pan that a boom needs. */
+export interface BoomOptions {
+  /** True for the sound tester, which lives inside the options panel. */
+  ignoreOptionsGuard?: boolean;
+  /** A white ball destroying a black one: the lifted voice with the metal ring. */
+  whiteBlack?: boolean;
+}
+
+/** Everything but the degree, the pan and the kind that a note needs. */
+export interface NoteOptions {
+  boost?: number;
+  /** Only read on the boom path, which forwards to `playBoom`. */
+  boomSize?: number;
+  ignoreOptionsGuard?: boolean;
+  whiteBlack?: boolean;
+}
+
+/** Everything but the pan that a magnet lock needs. */
+export interface MagnetLockOptions {
+  ignoreOptionsGuard?: boolean;
+  /** Two black balls locking to each other — the rarest bond on the table. */
+  isPair?: boolean;
+  /** The size of the group the merge produced, which sets the lock's weight. */
+  groupSize?: number;
+}
+
+/** Everything but the pan and the force that a launch swoosh needs. */
+export interface SwooshOptions {
+  ignoreOptionsGuard?: boolean;
+  /** The white cue ball, which is a struck metal sheet rather than a thud. */
+  isWhite?: boolean;
+}
 
 function rampFreq(param: any, targetVal: number, targetTime: number) {
   if (param.linearRampToValueAtTime) {
@@ -238,13 +365,13 @@ const WHITE_BLACK_RING = [
  * soft dynamics compressor to prevent crackle, and scaling by chain size.
  * `whiteBlack` selects the lifted, ringing variant described above.
  */
-export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsGuard: boolean = false, whiteBlack: boolean = false) {
-  if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.master || AudioStore.boomVol <= 0) return;
-  if (!ignoreOptionsGuard && isOptionsOpen()) return;
-  const actx = AudioStore.actx;
+export function playBoom(boomSize: number = 3, xNorm: number = 0, opts: BoomOptions = {}) {
+  const { ignoreOptionsGuard = false, whiteBlack = false } = opts;
+  if (!voiceAllowed(ignoreOptionsGuard, { vol: AudioStore.boomVol })) return;
+  const actx = AudioStore.actx!;
   const now = actx.currentTime;
-  const t = now + 0.015;
-  const dest = AudioStore.master;
+  const t = now + LOOKAHEAD.boom;
+  const dest = AudioStore.master!;
 
   const props = getBoomProps(boomSize);
   // The lifted boom carries more of its energy where the ear is most sensitive,
@@ -318,8 +445,8 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsG
     f.gain.setValueAtTime(echo.feedback, t + dur);
     f.gain.linearRampToValueAtTime(0, echoEnd);
   }
-  send.gain.value = 0.0001;
-  send.gain.setValueAtTime(0.0001, now);
+  send.gain.value = SILENCE;
+  send.gain.setValueAtTime(SILENCE, now);
   send.gain.linearRampToValueAtTime(echo.send, t + 0.02);
 
   trim.connect(send);
@@ -362,22 +489,14 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsG
       osc.frequency.setValueAtTime(tone * mode.ratio, t);
       // A slight downward drift over the tail: struck metal sags as it rings out.
       rampFreq(osc.frequency, tone * mode.ratio * 0.97, t + mode.decay);
-      g.gain.value = 0.0001;
-      g.gain.setValueAtTime(0.0001, now);
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(Math.max(0.0001, peak * mode.amp), t + 0.004);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + mode.decay);
+      g.gain.value = SILENCE;
+      g.gain.setValueAtTime(SILENCE, now);
+      g.gain.setValueAtTime(SILENCE, t);
+      g.gain.linearRampToValueAtTime(Math.max(SILENCE, peak * mode.amp), t + 0.004);
+      g.gain.exponentialRampToValueAtTime(SILENCE, t + mode.decay);
       g.gain.linearRampToValueAtTime(0, t + mode.decay + 0.02);
       osc.connect(g);
-      if (actx.createStereoPanner) {
-        const pan = actx.createStereoPanner();
-        parts.push(pan);
-        pan.pan.setValueAtTime(Math.max(-1, Math.min(1, xNorm * 0.5 + mode.pan)), t);
-        g.connect(pan);
-        pan.connect(comp);
-      } else {
-        g.connect(comp);
-      }
+      panned(g, comp, Math.max(-1, Math.min(1, xNorm * 0.5 + mode.pan)), t, parts);
       osc.start(t);
       osc.stop(t + mode.decay + 0.05);
     }
@@ -397,13 +516,13 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsG
   // Boom gain envelope: fast punch attack, body sustain, smooth clean decay
   const env = actx.createGain();
   parts.push(env);
-  env.gain.value = 0.0001;
-  env.gain.setValueAtTime(0.0001, now);
-  env.gain.setValueAtTime(0.0001, t);
-  env.gain.linearRampToValueAtTime(Math.max(0.0001, peak), t + 0.014);
-  env.gain.linearRampToValueAtTime(Math.max(0.0001, peak * 0.82), t + 0.06);
-  env.gain.linearRampToValueAtTime(Math.max(0.0001, peak * 0.40), t + dur * 0.55);
-  env.gain.linearRampToValueAtTime(0.0001, t + dur);
+  env.gain.value = SILENCE;
+  env.gain.setValueAtTime(SILENCE, now);
+  env.gain.setValueAtTime(SILENCE, t);
+  env.gain.linearRampToValueAtTime(Math.max(SILENCE, peak), t + 0.014);
+  env.gain.linearRampToValueAtTime(Math.max(SILENCE, peak * 0.82), t + 0.06);
+  env.gain.linearRampToValueAtTime(Math.max(SILENCE, peak * 0.40), t + dur * 0.55);
+  env.gain.linearRampToValueAtTime(SILENCE, t + dur);
   env.gain.linearRampToValueAtTime(0, t + dur + 0.04);
   env.connect(lp);
 
@@ -415,11 +534,11 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsG
     subOsc.type = 'sine';
     subOsc.frequency.setValueAtTime(startPitch * 0.5, t);
     rampFreq(subOsc.frequency, endPitch * 0.45, t + dur);
-    subGain.gain.value = 0.0001;
-    subGain.gain.setValueAtTime(0.0001, now);
-    subGain.gain.setValueAtTime(0.0001, t);
+    subGain.gain.value = SILENCE;
+    subGain.gain.setValueAtTime(SILENCE, now);
+    subGain.gain.setValueAtTime(SILENCE, t);
     subGain.gain.linearRampToValueAtTime(peak * 0.3, t + 0.02);
-    subGain.gain.linearRampToValueAtTime(0.0001, t + dur);
+    subGain.gain.linearRampToValueAtTime(SILENCE, t + dur);
     subGain.gain.linearRampToValueAtTime(0, t + dur + 0.04);
     subOsc.connect(subGain);
     subGain.connect(lp);
@@ -438,15 +557,7 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsG
   rampFreq(leftOsc.frequency, midL, t + 0.05);
   rampFreq(leftOsc.frequency, endL, t + dur);
 
-  if (actx.createStereoPanner) {
-    const panL = actx.createStereoPanner();
-    parts.push(panL);
-    panL.pan.setValueAtTime(Math.max(-1, Math.min(1, xNorm * 0.7 - 0.35)), t);
-    leftOsc.connect(panL);
-    panL.connect(env);
-  } else {
-    leftOsc.connect(env);
-  }
+  panned(leftOsc, env, Math.max(-1, Math.min(1, xNorm * 0.7 - 0.35)), t, parts);
   leftOsc.start(t);
   leftOsc.stop(t + dur + 0.05);
 
@@ -461,15 +572,7 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsG
   rampFreq(rightOsc.frequency, midR, t + 0.05);
   rampFreq(rightOsc.frequency, endR, t + dur);
 
-  if (actx.createStereoPanner) {
-    const panR = actx.createStereoPanner();
-    parts.push(panR);
-    panR.pan.setValueAtTime(Math.max(-1, Math.min(1, xNorm * 0.7 + 0.35)), t);
-    rightOsc.connect(panR);
-    panR.connect(env);
-  } else {
-    rightOsc.connect(env);
-  }
+  panned(rightOsc, env, Math.max(-1, Math.min(1, xNorm * 0.7 + 0.35)), t, parts);
   rightOsc.start(t);
   // This oscillator drives the cleanup below, so it outlives the boom by the
   // echo tail. Its envelope reached zero back at `t + dur`, so the extra time is
@@ -478,10 +581,7 @@ export function playBoom(boomSize: number = 3, xNorm: number = 0, ignoreOptionsG
   // down at the boom's own end would cut every repeat off with it.
   rightOsc.stop(echoEnd + 0.1);
 
-  rightOsc.onended = () => {
-    for (const n of parts) { try { n.disconnect(); } catch (_) {} }
-    parts.length = 0;
-  };
+  disposeWhenEnded(rightOsc, parts);
 }
 
 /**
@@ -563,9 +663,10 @@ export function resetAttractBooms() {
  * was the smallest tier, and the whole upper range of the sound was invisible
  * outside a match.
  */
-export function playRandomGameBoom(xNorm: number, profile: BoomProfile, ignoreOptionsGuard: boolean = false) {
+export function playRandomGameBoom(xNorm: number, profile: BoomProfile, opts: { ignoreOptionsGuard?: boolean } = {}) {
+  const { ignoreOptionsGuard = false } = opts;
   const boom = pickGameBoom(profile);
-  const actx = AudioStore.actx;
+  const actx = AudioStore.actx!;
   if (actx) {
     const now = actx.currentTime;
     attractBoomEnds = attractBoomEnds.filter((end) => end > now);
@@ -574,27 +675,26 @@ export function playRandomGameBoom(xNorm: number, profile: BoomProfile, ignoreOp
     const echo = boomEchoSpec(boom.boomSize, boom.whiteBlack);
     attractBoomEnds.push(now + props.dur + echo.tail);
   }
-  playBoom(boom.boomSize, xNorm, ignoreOptionsGuard, boom.whiteBlack);
+  playBoom(boom.boomSize, xNorm, { ignoreOptionsGuard, whiteBlack: boom.whiteBlack });
 }
 
-export function playNote(rel: number, xNorm: number, kind: 'bond' | 'break' | 'boom', boost?: number, boomSize?: number, ignoreOptionsGuard: boolean = false, whiteBlack: boolean = false) {
-  if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.master) return;
-  if (!ignoreOptionsGuard && isOptionsOpen()) return;
+export function playNote(rel: number, xNorm: number, kind: 'bond' | 'break' | 'boom', opts: NoteOptions = {}) {
+  const { boost, boomSize, ignoreOptionsGuard = false, whiteBlack = false } = opts;
+  if (!voiceAllowed(ignoreOptionsGuard)) return;
   if (kind === 'boom') {
-    playBoom(boomSize ?? 3, xNorm, ignoreOptionsGuard, whiteBlack);
+    playBoom(boomSize ?? 3, xNorm, { ignoreOptionsGuard, whiteBlack });
     return;
   }
 
-  const actx = AudioStore.actx;
+  const actx = AudioStore.actx!;
   if (AudioStore.activeVoices >= MAX_VOICES) return;
 
   const spec = kind === 'bond' ? BOND_VOICE : BREAK_VOICE;
   const now = actx.currentTime;
 
-  const LOOKAHEAD = 0.03;
   const spacing = Math.min(0.2, 0.025 + loadAt_(now) * 0.035);
   if (AudioStore.cursor < now || AudioStore.cursor > now + 0.5) AudioStore.cursor = now;
-  const t = Math.max(now + LOOKAHEAD, AudioStore.cursor + spacing);
+  const t = Math.max(now + LOOKAHEAD.note, AudioStore.cursor + spacing);
   if (t > now + 0.3) return;
   AudioStore.cursor = t;
 
@@ -623,11 +723,11 @@ export function playNote(rel: number, xNorm: number, kind: 'bond' | 'break' | 'b
 
   const env = actx.createGain();
   parts.push(env);
-  env.gain.value = 0.0001;
-  env.gain.setValueAtTime(0.0001, now);
-  env.gain.setValueAtTime(0.0001, t);
-  env.gain.linearRampToValueAtTime(Math.max(0.0001, peak), t + spec.attack);
-  env.gain.linearRampToValueAtTime(0.0001, t + dur);
+  env.gain.value = SILENCE;
+  env.gain.setValueAtTime(SILENCE, now);
+  env.gain.setValueAtTime(SILENCE, t);
+  env.gain.linearRampToValueAtTime(Math.max(SILENCE, peak), t + spec.attack);
+  env.gain.linearRampToValueAtTime(SILENCE, t + dur);
   env.gain.linearRampToValueAtTime(0, t + dur + 0.03);
 
   const lp = actx.createBiquadFilter();
@@ -642,20 +742,14 @@ export function playNote(rel: number, xNorm: number, kind: 'bond' | 'break' | 'b
   env.connect(lp);
   const dry = actx.createGain(); parts.push(dry);
   dry.gain.value = spec.dry || 0.62;
-  lp.connect(dry); dry.connect(AudioStore.master);
+  lp.connect(dry); dry.connect(AudioStore.master!);
   if (AudioStore.wetBus) lp.connect(AudioStore.wetBus);
 
   const oscs: OscillatorNode[] = [];
   [[-1, f, 1 - 0.3 * xNorm], [1, f + beat, 1 + 0.3 * xNorm]].forEach(([side, freq, bias]) => {
     const w = Math.max(0.35, bias) * 0.5;
     let dest: AudioNode = env;
-    if (actx.createStereoPanner) {
-      const pan = actx.createStereoPanner();
-      parts.push(pan);
-      pan.pan.value = side;
-      pan.connect(env);
-      dest = pan;
-    }
+    dest = panInto(env, side, parts);
     for (const [ratio, amt] of spec.partials) {
       const o = actx.createOscillator(), g = actx.createGain();
       parts.push(o, g);
@@ -681,10 +775,10 @@ export function playNote(rel: number, xNorm: number, kind: 'bond' | 'break' | 'b
     bp.Q.value = 1.4;
     const ng = actx.createGain();
     parts.push(ng);
-    ng.gain.value = 0.0001;
-    ng.gain.setValueAtTime(0.0001, now);
-    ng.gain.setValueAtTime(Math.max(0.0001, peak * spec.tick), t);
-    ng.gain.linearRampToValueAtTime(0.0001, t + 0.05);
+    ng.gain.value = SILENCE;
+    ng.gain.setValueAtTime(SILENCE, now);
+    ng.gain.setValueAtTime(Math.max(SILENCE, peak * spec.tick), t);
+    ng.gain.linearRampToValueAtTime(SILENCE, t + 0.05);
     ng.gain.linearRampToValueAtTime(0, t + 0.07);
     src.connect(bp); bp.connect(ng); ng.connect(lp);
     src.start(t); src.stop(t + 0.09);
@@ -693,11 +787,9 @@ export function playNote(rel: number, xNorm: number, kind: 'bond' | 'break' | 'b
   AudioStore.activeVoices++;
   const endSignalNode = oscs.length ? oscs[oscs.length - 1] : null;
   if (endSignalNode) {
-    endSignalNode.onended = () => {
+    disposeWhenEnded(endSignalNode, parts, () => {
       AudioStore.activeVoices = Math.max(0, AudioStore.activeVoices - 1);
-      for (const n of parts) { try { n.disconnect(); } catch (e) {} }
-      parts.length = 0;
-    };
+    });
   }
 }
 
@@ -750,10 +842,10 @@ export const PAIR_SUB_LIFT = 1.5;
 export const PAIR_DUR = 1.25;
 export const PAIR_VOL = 1.2;
 
-export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard: boolean = false, isPair: boolean = false, groupSize: number = 2) {
-  if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.master) return;
-  if (!ignoreOptionsGuard && isOptionsOpen()) return;
-  const actx = AudioStore.actx;
+export function playMagneticElectricSound(xNorm: number = 0, opts: MagnetLockOptions = {}) {
+  const { ignoreOptionsGuard = false, isPair = false, groupSize = 2 } = opts;
+  if (!voiceAllowed(ignoreOptionsGuard)) return;
+  const actx = AudioStore.actx!;
   if (AudioStore.activeVoices >= MAX_VOICES) return;
 
   const lift = isPair ? PAIR_LIFT : 1;
@@ -761,7 +853,7 @@ export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard:
   const level = getMagnetLockProps(groupSize);
 
   const now = actx.currentTime;
-  const t = now + 0.012;
+  const t = now + LOOKAHEAD.short;
   const dur = level.dur * (isPair ? PAIR_DUR : 1);
   // Kept under the bond lock: the square-wave arc sits at 2-5 kHz, where it
   // reads louder than its measured level against the lower game voices. The
@@ -776,13 +868,13 @@ export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard:
   // Master gain envelope for magnetic electric sound: double micro-spark pulse profile
   const env = actx.createGain();
   parts.push(env);
-  env.gain.value = 0.0001;
-  env.gain.setValueAtTime(0.0001, now);
-  env.gain.setValueAtTime(0.0001, t);
-  env.gain.linearRampToValueAtTime(Math.max(0.0001, peak), t + 0.003);
-  env.gain.linearRampToValueAtTime(Math.max(0.0001, peak * 0.4), t + 0.020);
-  env.gain.linearRampToValueAtTime(Math.max(0.0001, peak * 0.75), t + 0.035);
-  env.gain.linearRampToValueAtTime(0.0001, t + dur);
+  env.gain.value = SILENCE;
+  env.gain.setValueAtTime(SILENCE, now);
+  env.gain.setValueAtTime(SILENCE, t);
+  env.gain.linearRampToValueAtTime(Math.max(SILENCE, peak), t + 0.003);
+  env.gain.linearRampToValueAtTime(Math.max(SILENCE, peak * 0.4), t + 0.020);
+  env.gain.linearRampToValueAtTime(Math.max(SILENCE, peak * 0.75), t + 0.035);
+  env.gain.linearRampToValueAtTime(SILENCE, t + dur);
   env.gain.linearRampToValueAtTime(0, t + dur + 0.03);
 
   // Highpass / bandpass electrical arc filter for sharp sizzle
@@ -811,15 +903,7 @@ export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard:
   dry.gain.value = 0.65;
   lp.connect(dry);
 
-  if (actx.createStereoPanner) {
-    const pan = actx.createStereoPanner();
-    parts.push(pan);
-    pan.pan.value = Math.max(-1, Math.min(1, xNorm || 0)) * 0.7;
-    dry.connect(pan);
-    pan.connect(AudioStore.master);
-  } else {
-    dry.connect(AudioStore.master);
-  }
+  panned(dry, AudioStore.master!, Math.max(-1, Math.min(1, xNorm || 0)) * 0.7, undefined, parts);
   if (AudioStore.wetBus) lp.connect(AudioStore.wetBus);
 
   // 1. High Sizzling Electric FM Zap (Square + Sawtooth ring mod arc, 2400Hz -> 450Hz)
@@ -867,10 +951,10 @@ export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard:
     rampFreq(bp.frequency, Math.min(16000, 2200 * lift), t + 0.07);
     bp.Q.value = 6.0;
 
-    ng.gain.value = 0.0001;
-    ng.gain.setValueAtTime(0.0001, now);
+    ng.gain.value = SILENCE;
+    ng.gain.setValueAtTime(SILENCE, now);
     ng.gain.setValueAtTime(peak * 0.45, t);
-    ng.gain.linearRampToValueAtTime(0.0001, t + 0.06);
+    ng.gain.linearRampToValueAtTime(SILENCE, t + 0.06);
     ng.gain.linearRampToValueAtTime(0, t + 0.08);
 
     src.connect(bp);
@@ -890,11 +974,11 @@ export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard:
   rampFreq(subOsc.frequency, 320 * subLift, t + 0.03);
   rampFreq(subOsc.frequency, 90 * subLift, t + dur);
 
-  subGain.gain.value = 0.0001;
-  subGain.gain.setValueAtTime(0.0001, now);
-  subGain.gain.setValueAtTime(0.0001, t);
+  subGain.gain.value = SILENCE;
+  subGain.gain.setValueAtTime(SILENCE, now);
+  subGain.gain.setValueAtTime(SILENCE, t);
   subGain.gain.linearRampToValueAtTime(peak * 0.35 * level.sub, t + 0.015);
-  subGain.gain.linearRampToValueAtTime(0.0001, t + dur);
+  subGain.gain.linearRampToValueAtTime(SILENCE, t + dur);
   subGain.gain.linearRampToValueAtTime(0, t + dur + 0.03);
 
   subOsc.connect(subGain);
@@ -903,11 +987,9 @@ export function playMagneticElectricSound(xNorm: number = 0, ignoreOptionsGuard:
   subOsc.stop(t + dur + 0.05);
 
   AudioStore.activeVoices++;
-  carrier.onended = () => {
+  disposeWhenEnded(carrier, parts, () => {
     AudioStore.activeVoices = Math.max(0, AudioStore.activeVoices - 1);
-    for (const n of parts) { try { n.disconnect(); } catch (e) {} }
-    parts.length = 0;
-  };
+  });
 }
 
 function scaleDegree(rel: number): number {
@@ -947,7 +1029,7 @@ export const SWOOSH_METAL_MODES = [
 function playWhiteSwoosh(xNorm: number, normForce: number) {
   const actx = AudioStore.actx!;
   const now = actx.currentTime;
-  const t = now + 0.010;
+  const t = now + LOOKAHEAD.brief;
   const dur = 0.34;
   // Metal does not stop when the swing does. The banks ring on past the sweep
   // instead of being cut off at `dur`, which is most of what made the first
@@ -976,13 +1058,13 @@ function playWhiteSwoosh(xNorm: number, normForce: number) {
 
   const g = actx.createGain();
   parts.push(g);
-  g.gain.value = 0.0001;
-  g.gain.setValueAtTime(0.0001, now);
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(Math.max(0.0001, peak), t + 0.018);
-  g.gain.linearRampToValueAtTime(Math.max(0.0001, peak * 0.80), t + dur * 0.55);
-  g.gain.linearRampToValueAtTime(Math.max(0.0001, peak * 0.30), t + dur);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur + ring);
+  g.gain.value = SILENCE;
+  g.gain.setValueAtTime(SILENCE, now);
+  g.gain.setValueAtTime(SILENCE, t);
+  g.gain.linearRampToValueAtTime(Math.max(SILENCE, peak), t + 0.018);
+  g.gain.linearRampToValueAtTime(Math.max(SILENCE, peak * 0.80), t + dur * 0.55);
+  g.gain.linearRampToValueAtTime(Math.max(SILENCE, peak * 0.30), t + dur);
+  g.gain.exponentialRampToValueAtTime(SILENCE, t + dur + ring);
   g.gain.linearRampToValueAtTime(0, t + dur + ring + 0.03);
   src.connect(g);
 
@@ -1000,10 +1082,10 @@ function playWhiteSwoosh(xNorm: number, normForce: number) {
   scrapeBp.Q.value = 1.1;
   scrapeBp.frequency.setValueAtTime(6200, t);
   rampFreq(scrapeBp.frequency, 3100, t + 0.09);
-  scrapeG.gain.value = 0.0001;
-  scrapeG.gain.setValueAtTime(0.0001, now);
-  scrapeG.gain.setValueAtTime(Math.max(0.0001, peak * 0.5), t);
-  scrapeG.gain.exponentialRampToValueAtTime(0.0001, t + 0.075);
+  scrapeG.gain.value = SILENCE;
+  scrapeG.gain.setValueAtTime(SILENCE, now);
+  scrapeG.gain.setValueAtTime(Math.max(SILENCE, peak * 0.5), t);
+  scrapeG.gain.exponentialRampToValueAtTime(SILENCE, t + 0.075);
   scrapeG.gain.linearRampToValueAtTime(0, t + 0.1);
   scrapeSrc.connect(scrapeBp);
   scrapeBp.connect(scrapeG);
@@ -1014,14 +1096,8 @@ function playWhiteSwoosh(xNorm: number, normForce: number) {
   // the beating; panning alone would only place a mono sound.
   for (const side of [-1, 1]) {
     let dest: AudioNode = AudioStore.master!;
-    if (actx.createStereoPanner) {
-      const pan = actx.createStereoPanner();
-      parts.push(pan);
-      // Hard-ish sides, nudged by where on the table the throw happened.
-      pan.pan.value = Math.max(-1, Math.min(1, side * 0.85 + bias * 0.15));
-      pan.connect(dest);
-      dest = pan;
-    }
+    // Hard-ish sides, nudged by where on the table the throw happened.
+    dest = panInto(dest, Math.max(-1, Math.min(1, side * 0.85 + bias * 0.15)), parts);
     // A side kept slightly quieter reads as further away, which is the pan.
     const sideGain = actx.createGain();
     parts.push(sideGain);
@@ -1061,11 +1137,11 @@ function playWhiteSwoosh(xNorm: number, normForce: number) {
     sub.frequency.setValueAtTime(s0, t);
     rampFreq(sub.frequency, s1, t + dur * 0.4);
     rampFreq(sub.frequency, s2, t + dur);
-    subGain.gain.value = 0.0001;
-    subGain.gain.setValueAtTime(0.0001, now);
-    subGain.gain.setValueAtTime(0.0001, t);
+    subGain.gain.value = SILENCE;
+    subGain.gain.setValueAtTime(SILENCE, now);
+    subGain.gain.setValueAtTime(SILENCE, t);
     subGain.gain.linearRampToValueAtTime(peak * 0.42, t + 0.03);
-    subGain.gain.linearRampToValueAtTime(0.0001, t + dur);
+    subGain.gain.linearRampToValueAtTime(SILENCE, t + dur);
     subGain.gain.linearRampToValueAtTime(0, t + dur + 0.04);
     sub.connect(subGain);
     subGain.connect(dest);
@@ -1089,10 +1165,10 @@ function playWhiteSwoosh(xNorm: number, normForce: number) {
 }
 
 // Launch swoosh. Ball-on-ball collisions are `playKnock`.
-export function playThud(xNorm: number, force: number, ignoreOptionsGuard: boolean = false, isWhite: boolean = false) {
-  if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.noiseBuf || !AudioStore.master || AudioStore.clickVol <= 0) return;
-  if (!ignoreOptionsGuard && isOptionsOpen()) return;
-  const actx = AudioStore.actx;
+export function playSwoosh(xNorm: number, force: number, opts: SwooshOptions = {}) {
+  const { ignoreOptionsGuard = false, isWhite = false } = opts;
+  if (!voiceAllowed(ignoreOptionsGuard, { noise: true, vol: AudioStore.clickVol })) return;
+  const actx = AudioStore.actx!;
   const now = actx.currentTime;
   if (AudioStore.thuds >= MAX_THUDS) return;
 
@@ -1104,7 +1180,7 @@ export function playThud(xNorm: number, force: number, ignoreOptionsGuard: boole
   if (isWhite) { playWhiteSwoosh(xNorm, normForce); return; }
 
   // Tight 10ms lookahead for immediate audio response without JS frame-lag crackle
-  const t = now + 0.010;
+  const t = now + LOOKAHEAD.brief;
   const dur = 0.22;
   const peak = 0.22 * Math.max(0.15, normForce) * AudioStore.clickVol;
   if (peak < 0.001) return;
@@ -1114,13 +1190,13 @@ export function playThud(xNorm: number, force: number, ignoreOptionsGuard: boole
   src.loop = true;
   src.playbackRate.value = 0.85;
 
-  // 1. Envelope Gain Node FIRST (initialized to 0.0001 to prevent step discontinuities into filter)
+  // 1. Envelope Gain Node FIRST (initialized to SILENCE to prevent step discontinuities into filter)
   const g = actx.createGain();
-  g.gain.value = 0.0001;
-  g.gain.setValueAtTime(0.0001, now);
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(Math.max(0.0001, peak), t + 0.04);
-  g.gain.linearRampToValueAtTime(0.0001, t + dur);
+  g.gain.value = SILENCE;
+  g.gain.setValueAtTime(SILENCE, now);
+  g.gain.setValueAtTime(SILENCE, t);
+  g.gain.linearRampToValueAtTime(Math.max(SILENCE, peak), t + 0.04);
+  g.gain.linearRampToValueAtTime(SILENCE, t + dur);
   g.gain.linearRampToValueAtTime(0, t + dur + 0.03);
 
   // 2. Lowpass Filter SECOND (receives zero-initialized gain output)
@@ -1155,11 +1231,11 @@ export function playThud(xNorm: number, force: number, ignoreOptionsGuard: boole
   rampFreq(osc.frequency, midP, t + dur * 0.4);
   rampFreq(osc.frequency, endP, t + dur);
 
-  oscGain.gain.value = 0.0001;
-  oscGain.gain.setValueAtTime(0.0001, now);
-  oscGain.gain.setValueAtTime(0.0001, t);
+  oscGain.gain.value = SILENCE;
+  oscGain.gain.setValueAtTime(SILENCE, now);
+  oscGain.gain.setValueAtTime(SILENCE, t);
   oscGain.gain.linearRampToValueAtTime(peak * 0.45, t + 0.04);
-  oscGain.gain.linearRampToValueAtTime(0.0001, t + dur);
+  oscGain.gain.linearRampToValueAtTime(SILENCE, t + dur);
   oscGain.gain.linearRampToValueAtTime(0, t + dur + 0.03);
 
   osc.connect(oscGain);
@@ -1167,17 +1243,9 @@ export function playThud(xNorm: number, force: number, ignoreOptionsGuard: boole
   osc.start(t);
   osc.stop(t + dur + 0.05);
 
-  if (actx.createStereoPanner) {
-    const pan = actx.createStereoPanner();
-    parts.push(pan);
-    pan.pan.value = Math.max(-1, Math.min(1, xNorm || 0)) * 0.7;
-    bp.connect(pan);
-    pan.connect(AudioStore.master);
-  } else {
-    bp.connect(AudioStore.master);
-  }
+  panned(bp, AudioStore.master!, Math.max(-1, Math.min(1, xNorm || 0)) * 0.7, undefined, parts);
 
-  const bufDur = AudioStore.noiseBuf.duration || 2.0;
+  const bufDur = AudioStore.noiseBuf!.duration || 2.0;
   const offset = Math.random() * Math.max(0, bufDur - 0.5);
   src.start(t, offset);
   src.stop(t + dur + 0.05);
@@ -1205,11 +1273,11 @@ function knockPitch(rel: number): number {
 }
 
 function knockEnvelope(param: AudioParam, peak: number, now: number, t: number, attack: number, decay: number) {
-  param.value = 0.0001;
-  param.setValueAtTime(0.0001, now);
-  param.setValueAtTime(0.0001, t);
-  param.linearRampToValueAtTime(Math.max(0.0001, peak), t + attack);
-  param.exponentialRampToValueAtTime(0.0001, t + attack + decay);
+  param.value = SILENCE;
+  param.setValueAtTime(SILENCE, now);
+  param.setValueAtTime(SILENCE, t);
+  param.linearRampToValueAtTime(Math.max(SILENCE, peak), t + attack);
+  param.exponentialRampToValueAtTime(SILENCE, t + attack + decay);
   param.linearRampToValueAtTime(0, t + attack + decay + 0.01);
 }
 
@@ -1219,13 +1287,13 @@ function knockEnvelope(param: AudioParam, peak: number, now: number, t: number, 
  * so a collision is a two-note chord, the struck ball answering just after the
  * hitter. Harder hits are brighter, not higher, to stay in key.
  */
-export function playKnock(xNorm: number, force: number, relHitter: number, relStruck: number, ignoreOptionsGuard: boolean = false) {
-  if (!AudioStore.soundOn || !AudioStore.actx || !AudioStore.noiseBuf || !AudioStore.master || AudioStore.clickVol <= 0) return;
-  if (!ignoreOptionsGuard && isOptionsOpen()) return;
+export function playKnock(xNorm: number, force: number, relHitter: number, relStruck: number, opts: { ignoreOptionsGuard?: boolean } = {}) {
+  const { ignoreOptionsGuard = false } = opts;
+  if (!voiceAllowed(ignoreOptionsGuard, { noise: true, vol: AudioStore.clickVol })) return;
   if (AudioStore.thuds >= MAX_THUDS) return;
   const normForce = Math.min(1, Math.max(0, force));
   if (normForce < 0.03) return;
-  const actx = AudioStore.actx;
+  const actx = AudioStore.actx!;
   const now = actx.currentTime;
   if (now - AudioStore.thudAt < 0.035) return;
   AudioStore.thudAt = now;
@@ -1235,7 +1303,7 @@ export function playKnock(xNorm: number, force: number, relHitter: number, relSt
   const peak = 0.085 * Math.max(0.15, normForce) * AudioStore.clickVol;
   if (peak < 0.001) return;
   // Tight 10ms lookahead for immediate audio response without JS frame-lag crackle
-  const t = now + 0.010;
+  const t = now + LOOKAHEAD.brief;
   const bright = 0.55 + 0.45 * normForce;
   const hitterF = knockPitch(relHitter);
   const struckF = knockPitch(relStruck);
@@ -1247,13 +1315,7 @@ export function playKnock(xNorm: number, force: number, relHitter: number, relSt
 
   const parts: any[] = [];
   let dest: AudioNode = AudioStore.master!;
-  if (actx.createStereoPanner) {
-    const pan = actx.createStereoPanner();
-    parts.push(pan);
-    pan.pan.value = Math.max(-1, Math.min(1, xNorm || 0)) * 0.7;
-    pan.connect(dest);
-    dest = pan;
-  }
+  dest = panInto(dest, Math.max(-1, Math.min(1, xNorm || 0)) * 0.7, parts);
 
   for (const note of notes) {
     KNOCK_MODES.forEach((m, i) => {

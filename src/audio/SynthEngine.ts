@@ -85,6 +85,26 @@ export const AudioStore: AudioState = {
   latency: 0.05,
 };
 
+/**
+ * The gain an envelope rests at when it means silence.
+ *
+ * Not zero: `exponentialRampToValueAtTime` is undefined at zero and throws, and
+ * a ramp that starts from exactly zero never leaves it. Every envelope in the
+ * game therefore parks here instead — 88 times before this was one declaration,
+ * and a floor that drifted between voices is a click in the ones that got it
+ * wrong.
+ */
+export const SILENCE = 0.0001;
+
+/**
+ * The ambient drone's level at full `drone` knob.
+ *
+ * The drone runs continuously under everything, so this is deliberately far
+ * below any voice. It is applied in two places — `applyDrone` and `startDrone` —
+ * which must agree or the drone jumps in level the first time the knob moves.
+ */
+export const DRONE_LEVEL = 0.026;
+
 export const MAX_VOICES = 22;
 export const MAX_THUDS = 10;
 export const BEAT = 5; // Hz binaural beat
@@ -165,7 +185,7 @@ export function applyDrone() {
   const { actx, droneGain, drone, soundOn } = AudioStore;
   if (!actx || !droneGain) return;
   const optionsActive = isOptionsOpen();
-  const targetGain = _isResultsDucked || _isOptionsDucked || optionsActive || !soundOn ? 0 : 0.026 * Math.max(0, drone);
+  const targetGain = _isResultsDucked || _isOptionsDucked || optionsActive || !soundOn ? 0 : DRONE_LEVEL * Math.max(0, drone);
   if (optionsActive || _isOptionsDucked) {
     droneGain.gain.setValueAtTime(0, actx.currentTime);
   } else {
@@ -271,7 +291,7 @@ export function startDrone() {
   const soundOn = AudioStore.soundOn;
   const optionsActive = isOptionsOpen();
   const droneVal = _isResultsDucked || _isOptionsDucked || optionsActive || !soundOn ? 0 : Math.max(0, AudioStore.drone);
-  const targetGain = 0.026 * droneVal;
+  const targetGain = DRONE_LEVEL * droneVal;
 
   const droneGain = actx.createGain();
   droneGain.gain.value = targetGain;

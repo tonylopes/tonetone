@@ -1,5 +1,5 @@
 import { AudioStore, BEAT, initAudio, applyGain } from '../audio/SynthEngine';
-import { playNote, playThud, playKnock, playCountdownTick, getBoomProps, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
+import { playNote, playSwoosh, playKnock, playCountdownTick, getBoomProps, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
 import { playBinauralClick } from '../audio/UiSounds';
 
 export interface SoundDef {
@@ -44,7 +44,7 @@ const WHITE_BLACK_LEVELS: SoundDef[] = LEVEL_TIERS.map(({ boomSize, label }) => 
   },
   play: () => {
     initAudio();
-    playNote(0.5, 0, 'boom', 1.0, boomSize, true, true);
+    playNote(0.5, 0, 'boom', { boost: 1.0, boomSize, ignoreOptionsGuard: true, whiteBlack: true });
   },
 }));
 
@@ -67,7 +67,7 @@ const BLACK_LOCK_LEVELS: SoundDef[] = LEVEL_TIERS.flatMap(({ boomSize, label }) 
     },
     play: () => {
       initAudio();
-      playMagneticElectricSound(0, true, isPair, boomSize);
+      playMagneticElectricSound(0, { ignoreOptionsGuard: true, isPair, groupSize: boomSize });
     },
   }))
 );
@@ -81,7 +81,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `Voice: BOND_VOICE (2.5× Pitch) | Vol: lockVol (${Math.round(AudioStore.lockVol * 100)}%) | Master: ${Math.round(AudioStore.volume * 100)}%`,
     play: () => {
       initAudio();
-      playNote(0.3, 0, 'bond', 1.0, undefined, true);
+      playNote(0.3, 0, 'bond', { boost: 1.0, ignoreOptionsGuard: true });
     }
   },
   {
@@ -92,7 +92,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `Electric Square Arc FM Zap + Bandpass Static Discharge + Magnetic Sub Snap | Arc: 2400Hz → 450Hz | Controlled Vol (${Math.round(AudioStore.lockVol * 100)}%)`,
     play: () => {
       initAudio();
-      playMagneticElectricSound(0, true);
+      playMagneticElectricSound(0, { ignoreOptionsGuard: true });
     }
   },
   {
@@ -103,7 +103,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `Voice: BREAK_VOICE (1.0× Pitch, 0.42s) | Vol: breakVol (${Math.round(AudioStore.breakVol * 100)}%) | Master: ${Math.round(AudioStore.volume * 100)}%`,
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'break', 1.0, undefined, true);
+      playNote(0.5, 0, 'break', { boost: 1.0, ignoreOptionsGuard: true });
     }
   },
   {
@@ -118,7 +118,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     },
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'boom', 1.0, 3, true);
+      playNote(0.5, 0, 'boom', { boost: 1.0, boomSize: 3, ignoreOptionsGuard: true });
     }
   },
   {
@@ -133,7 +133,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     },
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'boom', 1.0, 7, true);
+      playNote(0.5, 0, 'boom', { boost: 1.0, boomSize: 7, ignoreOptionsGuard: true });
     }
   },
   {
@@ -148,7 +148,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     },
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'boom', 1.0, 12, true);
+      playNote(0.5, 0, 'boom', { boost: 1.0, boomSize: 12, ignoreOptionsGuard: true });
     }
   },
   {
@@ -163,7 +163,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     },
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'boom', 1.0, 18, true);
+      playNote(0.5, 0, 'boom', { boost: 1.0, boomSize: 18, ignoreOptionsGuard: true });
     }
   },
   {
@@ -178,7 +178,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     },
     play: () => {
       initAudio();
-      playNote(0.5, 0, 'boom', 1.0, 25, true);
+      playNote(0.5, 0, 'boom', { boost: 1.0, boomSize: 25, ignoreOptionsGuard: true });
     }
   },
   {
@@ -189,7 +189,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `Tuned Wood Bar: each ball's colour note, 1 octave above its lock (modes × 1, 3, 6) + Noise Click | Dur: 0.12s | Vol: knocks (${Math.round(AudioStore.clickVol * 100)}%)`,
     play: () => {
       initAudio();
-      playKnock(0, 0.6, 0, 2 / 6, true);
+      playKnock(0, 0.6, 0, 2 / 6, { ignoreOptionsGuard: true });
     }
   },
   {
@@ -200,7 +200,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `Pitch-Swept Sine Sub: 130Hz → 260Hz → 100Hz | Dur: 0.22s | Vol: knocks (${Math.round(AudioStore.clickVol * 100)}%)`,
     play: () => {
       initAudio();
-      playThud(0, 0.7, true, false);
+      playSwoosh(0, 0.7, { ignoreOptionsGuard: true });
     }
   },
   {
@@ -211,7 +211,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `Binaural metal-bar banks (× 1, 2.76, 5.40, 8.93 at Q 11–20) swept 520Hz → 1250Hz → 610Hz, sides ${BEAT}Hz apart | + binaural sub | Dur: 0.34s | Vol: knocks (${Math.round(AudioStore.clickVol * 100)}%)`,
     play: () => {
       initAudio();
-      playThud(0, 0.7, true, true);
+      playSwoosh(0, 0.7, { ignoreOptionsGuard: true, isWhite: true });
     }
   },
   {
@@ -222,7 +222,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `High-Pitch Sine Beep: 1180 Hz | Dur: 0.09s | Fixed Vol: 22%`,
     play: () => {
       initAudio();
-      playCountdownTick(false, true);
+      playCountdownTick({ ignoreOptionsGuard: true });
     }
   },
   {
@@ -233,7 +233,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `High-Pitch Sine Beep: 1180 Hz | Dur: 0.16s | Fixed Vol: 30%`,
     play: () => {
       initAudio();
-      playCountdownTick(true, true);
+      playCountdownTick({ isGo: true, ignoreOptionsGuard: true });
     }
   },
   {

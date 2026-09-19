@@ -3,7 +3,7 @@ import { ageEffects } from '../physics/CollisionSolver';
 import { PhysicsConfig } from '../physics/Config';
 import { panOf } from '../audio/SoundEvents';
 import { AudioStore, isOptionsOpen } from '../audio/SynthEngine';
-import { playNote, playThud, playRandomGameBoom } from '../audio/Voices';
+import { playNote, playSwoosh, playRandomGameBoom } from '../audio/Voices';
 
 /**
  * The fireworks over the results card: flashes, floating words and booms, on
@@ -80,7 +80,7 @@ export function updateResultsEffects(game: Game, dt: number, W: number, H: numbe
     if (AudioStore.soundOn && !isOptionsOpen()) {
       const normX = panOf(rx, W);
       if (k === 'spawn' || k === 'blocked') playRandomGameBoom(normX, 'celebration');
-      else playNote(Math.random(), normX, k === 'break' ? 'break' : 'bond', 0.6);
+      else playNote(Math.random(), normX, k === 'break' ? 'break' : 'bond', { boost: 0.6 });
     }
   }
 
@@ -113,7 +113,7 @@ export function updateResultsEffects(game: Game, dt: number, W: number, H: numbe
 
     if (AudioStore.soundOn && !isOptionsOpen() && Math.random() < 0.4) {
       const normX = panOf(rx, W);
-      playThud(normX, 0.4);
+      playSwoosh(normX, 0.4);
     }
   }
 }
