@@ -29,7 +29,7 @@ describe('Bug Detection Test Suite', () => {
   });
 
   describe('Bug 2: Special ball color corruption during colors setting update', () => {
-    it('preserves special ball color (BLACK_HEX/WHITE_HEX) when updating color count', () => {
+    it('preserves special ball color (black/white) when updating color count', () => {
       const game = createGame();
       const blackBall: Ball = {
         id: 1, x: 100, y: 100, kind: -1, special: 'black', color: BLACK_HEX, credit: 0, bonds: new Set(), group: null as any
