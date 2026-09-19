@@ -13,7 +13,7 @@ import { setPaused, setupMatchControls } from './ui/MatchControls';
 import { settingsLine } from './game/Settings';
 import { initAudio, AudioStore, applyGain, fadeDroneForResults, fadeDroneForOptions, setOptionsOpenState } from './audio/SynthEngine';
 import { uiClick } from './audio/UiSounds';
-import { initMenuScreen, showMenu, isMenuOccluding, slideOutRight, slideInFromRight } from './ui/MenuScreen';
+import { initMenuScreen, showMenu, isMenuOccluding, slideOutRight, slideInFromRight } from './ui/menu/MenuScreen';
 
 const stageEl = document.getElementById('stage') as HTMLElement;
 const cv = document.getElementById('c') as HTMLCanvasElement;

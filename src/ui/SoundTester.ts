@@ -1,6 +1,6 @@
 import { AudioStore, BEAT, initAudio, applyGain } from '../audio/SynthEngine';
 import { playNote, playThud, playKnock, playCountdownTick, getBoomProps, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
-import { playBinauralClick } from './MenuScreen';
+import { playBinauralClick } from '../audio/UiSounds';
 
 export interface SoundDef {
   id: string;

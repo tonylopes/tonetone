@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { initMenuScreen, showMenu, hideMenu, isMenuVisible, computeMenuLayout, playBinauralClick, resetBinauralAudioStateForTesting } from '../../src/ui/MenuScreen';
+import { initMenuScreen, showMenu, hideMenu, isMenuVisible } from '../../src/ui/menu/MenuScreen';
+import { computeMenuLayout } from '../../src/ui/menu/MenuLayout';
+import { MAX_MENU_VOICES, playBinauralClick, resetUiSoundsForTesting, setClickLockMs } from '../../src/audio/UiSounds';
 import { AudioStore } from '../../src/audio/SynthEngine';
 import type { PlayMode } from '../../src/game/GameState';
 
@@ -152,7 +154,11 @@ describe('MenuScreen', () => {
     let mockCtx: any;
 
     beforeEach(() => {
-      resetBinauralAudioStateForTesting();
+      resetUiSoundsForTesting();
+      // The click lock refuses a second click inside 180ms. These tests fire
+      // clicks back to back on purpose, so they turn it off rather than relying
+      // on production code noticing it is under test.
+      setClickLockMs(0);
       createdNodes = [];
       createdGains = [];
       createdOscillators = [];
@@ -242,7 +248,7 @@ describe('MenuScreen', () => {
       });
     });
 
-    it('caps concurrent active binaural click voices to MAX_MENU_VOICES (6) to prevent WebAudio thread overload', () => {
+    it('caps concurrent active binaural click voices to MAX_MENU_VOICES to prevent WebAudio thread overload', () => {
       mockCtx.currentTime = 1.0;
       let timestampCounter = 100;
 
@@ -257,7 +263,7 @@ describe('MenuScreen', () => {
       }
 
       const masterNodes = createdOscillators.filter(n => typeof n.onended === 'function');
-      expect(masterNodes.length).toBeLessThanOrEqual(6);
+      expect(masterNodes.length).toBeLessThanOrEqual(MAX_MENU_VOICES);
     });
   });
 });

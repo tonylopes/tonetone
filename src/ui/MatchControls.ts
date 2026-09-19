@@ -1,7 +1,7 @@
 import { Game } from '../game/GameState';
 import { uiClick } from '../audio/UiSounds';
 import { fadeDroneForResults } from '../audio/SynthEngine';
-import { showMenu } from './MenuScreen';
+import { showMenu } from './menu/MenuScreen';
 import { setHidden } from './Dom';
 
 /**
