@@ -1,5 +1,5 @@
 import { AudioStore, BEAT, initAudio, applyGain } from '../audio/SynthEngine';
-import { playNote, playThud, playKnock, playCountdownTick, playBoom, getBoomProps, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
+import { playNote, playThud, playKnock, playCountdownTick, getBoomProps, getMagnetLockProps, getWhiteBlackBoomVol, boomEchoSpec, playMagneticElectricSound, PAIR_LIFT, PAIR_SUB_LIFT, PAIR_DUR, PAIR_VOL } from '../audio/Voices';
 import { playBinauralClick } from './MenuScreen';
 
 export interface SoundDef {
@@ -200,7 +200,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `Pitch-Swept Sine Sub: 130Hz → 260Hz → 100Hz | Dur: 0.22s | Vol: knocks (${Math.round(AudioStore.clickVol * 100)}%)`,
     play: () => {
       initAudio();
-      playThud('swoosh', 0, 0.7, true, false);
+      playThud(0, 0.7, true, false);
     }
   },
   {
@@ -211,7 +211,7 @@ export const SOUND_CATALOG: SoundDef[] = [
     getParamsText: () => `Binaural metal-bar banks (× 1, 2.76, 5.40, 8.93 at Q 11–20) swept 520Hz → 1250Hz → 610Hz, sides ${BEAT}Hz apart | + binaural sub | Dur: 0.34s | Vol: knocks (${Math.round(AudioStore.clickVol * 100)}%)`,
     play: () => {
       initAudio();
-      playThud('swoosh', 0, 0.7, true, true);
+      playThud(0, 0.7, true, true);
     }
   },
   {
@@ -263,13 +263,10 @@ export const SOUND_CATALOG: SoundDef[] = [
   ...BLACK_LOCK_LEVELS,
 ];
 
-let containerEl: HTMLElement | null = null;
-
 const paramElementsMap = new Map<string, HTMLElement>();
 const cachedParamTexts = new Map<string, string>();
 
 export function renderSoundTester(targetContainer: HTMLElement) {
-  containerEl = targetContainer;
   targetContainer.innerHTML = '';
   paramElementsMap.clear();
   cachedParamTexts.clear();

@@ -1,4 +1,6 @@
-import { Game, createGame, resetField, startTurns, spawn } from './game/GameState';
+import { Game, createGame, resetField, startMatch } from './game/GameState';
+import { FLASH_LIFE, POP_LIFE } from './physics/Types';
+import { panOf } from './audio/SoundEvents';
 import { advanceFrame } from './sim/Frame';
 import { createRenderContext, resizeRenderer, drawGame, drawResultsCanvas } from './graphics/Renderer';
 import { clearSpriteCache } from './graphics/Sprites';
@@ -54,14 +56,12 @@ window.addEventListener('pageshow', recoverGraphics);
 const strip1 = createStrip(
   game.players[0],
   { chipNow: 'chipNow', chipNext: 'chipNext', strip: 'cue' },
-  false,
   () => game
 );
 
 const strip2 = createStrip(
   game.players[1],
   { chipNow: 'chipNow2', chipNext: 'chipNext2', strip: 'cue2' },
-  true,
   () => game
 );
 
@@ -128,11 +128,8 @@ window.addEventListener('keydown', e => {
 function newMatch() {
   resetField(game, renderCtx.W, renderCtx.H);
   setPaused(false);
-  game.matchT = 0;
-  game.matchOver = false;
-  // Give each player a full reload delay so no ball fires until the start countdown finishes
-  for (const p of game.players) p.reload = game.reloadTime;
-  game.matchRunning = true;
+  // Hold fire for one reload so no ball leaves a launcher until the start countdown ends.
+  startMatch(game, game.reloadTime);
   fadeDroneForResults(false);
   const overEl = document.getElementById('over');
   if (overEl) overEl.setAttribute('hidden', '');
@@ -142,15 +139,13 @@ function newMatch() {
 }
 
 
-setupSettingsKnobs(() => game, handleResize, () => renderCtx.H || window.innerHeight);
+setupSettingsKnobs(() => game, () => renderCtx.H || window.innerHeight);
 
-let playMode = 1;
 function setPlayers(n: number) {
   // The menu owns the audio toggle while it is up, and it writes straight to
   // AudioStore. Nothing refreshed the bar's button from that, so a match entered
   // with audio switched off in the menu still showed "Audio on".
   setSound(AudioStore.soundOn);
-  playMode = n;
   game.twoPlayer = n !== 1;
   game.aiOn = n === 3;
   const strip2El = document.getElementById('cue2');
@@ -355,7 +350,7 @@ function updateResultsEffects(game: Game, dt: number, W: number, H: number) {
   // 1. Advance active flashes
   for (let i = game.flashes.length - 1; i >= 0; i--) {
     game.flashes[i].t += dt;
-    if (game.flashes[i].t >= 0.85) game.flashes.splice(i, 1);
+    if (game.flashes[i].t >= FLASH_LIFE) game.flashes.splice(i, 1);
   }
 
   // 2. Advance active pops
@@ -363,7 +358,7 @@ function updateResultsEffects(game: Game, dt: number, W: number, H: number) {
     const pop = game.pops[i];
     pop.t += dt;
     pop.y -= dt * 30;
-    if (pop.t >= 1.1) game.pops.splice(i, 1);
+    if (pop.t >= POP_LIFE) game.pops.splice(i, 1);
   }
 
   const winnerIdx = celebrationWinner(game);
@@ -384,7 +379,7 @@ function updateResultsEffects(game: Game, dt: number, W: number, H: number) {
     game.flashes.push({ x: rx, y: ry, t: 0, kind: k });
 
     if (AudioStore.soundOn && !isOptionsOpen()) {
-      const normX = W > 0 ? (rx / W) * 2 - 1 : 0;
+      const normX = panOf(rx, W);
       if (k === 'spawn' || k === 'blocked') playRandomGameBoom(normX, 'celebration');
       else playNote(Math.random(), normX, k === 'break' ? 'break' : 'bond', 0.6);
     }
@@ -418,8 +413,8 @@ function updateResultsEffects(game: Game, dt: number, W: number, H: number) {
     game.pops.push({ x: rx, y: ry, t: 0, text: txt, who: winnerIdx });
 
     if (AudioStore.soundOn && !isOptionsOpen() && Math.random() < 0.4) {
-      const normX = W > 0 ? (rx / W) * 2 - 1 : 0;
-      playThud('swoosh', normX, 0.4);
+      const normX = panOf(rx, W);
+      playThud(normX, 0.4);
     }
   }
 }

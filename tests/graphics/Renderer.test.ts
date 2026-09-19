@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { drawScores, drawPops, drawOneLauncher, popCenterX, POP_EDGE_PAD, RenderContext, P_COLOR } from '../../src/graphics/Renderer';
+import { drawPops, drawOneLauncher, popCenterX, POP_EDGE_PAD, RenderContext, P_COLOR } from '../../src/graphics/Renderer';
 import { createGame } from '../../src/game/GameState';
 
 function createMockContext() {
@@ -28,27 +28,6 @@ function createMockContext() {
 
   return { ctx, fillTextCalls };
 }
-
-describe('Renderer module - drawScores', () => {
-  it('is a no-op as scores and match time are rendered in the HTML next-balls bar HUD elements', () => {
-    const { ctx, fillTextCalls } = createMockContext();
-    const rc: RenderContext = {
-      cv: {} as any,
-      ctx,
-      bg: {} as any,
-      bgx: {} as any,
-      W: 800,
-      H: 600,
-      bgW: 100,
-      bgH: 100,
-    };
-
-    const game = createGame();
-    drawScores(rc, game);
-
-    expect(fillTextCalls.length).toBe(0);
-  });
-});
 
 describe('Renderer module - drawPops', () => {
   it('renders score pops with source-over blending, player color, and black glow shadow', () => {

@@ -17,7 +17,6 @@ import {
   KNOBS,
   KnobValue,
   PRESETS,
-  knobIds,
   parseKnobValue,
   presetIds,
   presetKnobs,
@@ -40,6 +39,39 @@ interface Args {
   flags: Record<string, string | boolean>;
 }
 
+/**
+ * Flags that never take a value.
+ *
+ * `parseArgs` bound the following token to any `--flag` that was not written as
+ * `--flag=value`, so `sweep --json boom=0.2,0.4` handed the knob spec to `--json`
+ * and then failed with "sweep needs knob=v1,v2,v3". Naming the boolean flags stops
+ * them swallowing the next argument, so flag order no longer matters.
+ */
+const BOOLEAN_FLAGS = new Set(['json']);
+
+/** The options every command that runs a simulation shares. */
+const RUN_FLAGS = [
+  'mode', 'policy', 'seed', 'seconds', 'width', 'height', 'preset', 'set', 'invariants',
+] as const;
+
+/**
+ * What each command accepts. A flag outside its command's list is a usage error:
+ * one generic parser served every command, so a mistyped `--runs` or a `--metrics`
+ * on `run` was accepted and then silently ignored, and the run still reported
+ * numbers as though the flag had taken effect.
+ */
+const COMMAND_FLAGS: Record<string, readonly string[]> = {
+  run: [...RUN_FLAGS, 'runs', 'json'],
+  sweep: [...RUN_FLAGS, 'runs', 'metrics', 'json'],
+  compare: [...RUN_FLAGS, 'runs', 'metrics', 'a', 'b', 'json'],
+  invariants: ['seconds', 'json'],
+  physics: ['json'],
+  baseline: ['tolerance', 'json'],
+  knobs: ['json'],
+  metrics: ['json'],
+  help: [],
+};
+
 function parseArgs(argv: string[]): Args {
   const [command = 'help', ...rest] = argv;
   const positional: string[] = [];
@@ -49,14 +81,33 @@ function parseArgs(argv: string[]): Args {
     const a = rest[i];
     if (a.startsWith('--')) {
       const eq = a.indexOf('=');
-      if (eq > 0) flags[a.slice(2, eq)] = a.slice(eq + 1);
-      else if (rest[i + 1] && !rest[i + 1].startsWith('--')) flags[a.slice(2)] = rest[++i];
-      else flags[a.slice(2)] = true;
+      if (eq > 0) {
+        flags[a.slice(2, eq)] = a.slice(eq + 1);
+        continue;
+      }
+      const name = a.slice(2);
+      if (!BOOLEAN_FLAGS.has(name) && rest[i + 1] && !rest[i + 1].startsWith('--')) {
+        flags[name] = rest[++i];
+      } else {
+        flags[name] = true;
+      }
     } else {
       positional.push(a);
     }
   }
   return { command, positional, flags };
+}
+
+/** Reject any flag the command does not declare. */
+function checkFlags(args: Args): void {
+  const allowed = COMMAND_FLAGS[args.command];
+  if (!allowed) return;
+  for (const name of Object.keys(args.flags)) {
+    if (!allowed.includes(name)) {
+      const list = allowed.length ? allowed.map(f => '--' + f).join(', ') : '(none)';
+      fail(`unknown flag --${name} for "${args.command}". It accepts: ${list}`);
+    }
+  }
 }
 
 function num(flags: Args['flags'], key: string, fallback: number): number {
@@ -143,6 +194,15 @@ function fixed(v: number, places = 2): string {
   return Number.isFinite(v) ? v.toFixed(places) : String(v);
 }
 
+/**
+ * One estimate as `mean ± standard error`. Written out at four call sites before,
+ * which is how `compare` and `sweep` came to print it three slightly different ways.
+ */
+function estimateText(mean: number, stderr: number, signed = false): string {
+  const sign = signed && mean >= 0 ? '+' : '';
+  return `${sign}${fixed(mean)} ±${fixed(stderr)}`;
+}
+
 function invariantLine(r: RunResult): string {
   const bad = violations(r.worst);
   const detail = `overlap ${fixed(r.worst.overlap, 4)}px, frozen ${r.worst.frozen.toExponential(1)}px, outside ${fixed(r.worst.outside, 4)}px`;
@@ -207,7 +267,16 @@ function cmdSweep(args: Args): number {
   }
   const id = spec.slice(0, spec.indexOf('='));
   if (!KNOBS[id]) fail(`Unknown knob "${id}". Try: npm run sim -- knobs`);
-  const values = spec.slice(spec.indexOf('=') + 1).split(',').map(v => parseKnobValue(id, v.trim()));
+  // `parseSet` catches this and `cmdSweep` did not, so an out-of-range sweep value
+  // exited 1 with a stack trace where the same value via `--set` exited 2 with a
+  // one-line usage error.
+  const values = spec.slice(spec.indexOf('=') + 1).split(',').map(v => {
+    try {
+      return parseKnobValue(id, v.trim());
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  });
 
   // Floored at 2, as `compare` is: a single run has no standard error to report,
   // and printing "±0.00" under a header about 2x the error invites exactly the
@@ -229,7 +298,7 @@ function cmdSweep(args: Args): number {
 
     for (const m of metricNames) {
       const est = estimate(results.map(extract(m)));
-      row.push(`${fixed(est.mean)} ±${fixed(est.stderr)}`);
+      row.push(estimateText(est.mean, est.stderr));
       entry.metrics[m] = { mean: est.mean, stderr: est.stderr, n: est.n };
     }
     const bad = results.filter(r => violations(r.worst).length);
@@ -274,9 +343,9 @@ function cmdCompare(args: Args): number {
     const c = compare(ra.map(extract(m)), rb.map(extract(m)));
     rows.push([
       m,
-      `${fixed(c.a.mean)} ±${fixed(c.a.stderr)}`,
-      `${fixed(c.b.mean)} ±${fixed(c.b.stderr)}`,
-      `${c.delta >= 0 ? '+' : ''}${fixed(c.delta)} ±${fixed(c.stderr)}`,
+      estimateText(c.a.mean, c.a.stderr),
+      estimateText(c.b.mean, c.b.stderr),
+      estimateText(c.delta, c.stderr, true),
       c.verdict,
     ]);
     json.metrics[m] = c;
@@ -290,7 +359,7 @@ function cmdCompare(args: Args): number {
     json.catchUp = { a: ea, b: eb, comparison: c };
     rows.push([
       'catch-up (paired)',
-      `${fixed(ea.mean)} ±${fixed(ea.stderr)}`,
+      estimateText(ea.mean, ea.stderr),
       `${fixed(eb.mean)} ±${fixed(eb.stderr)}`,
       `${c.delta >= 0 ? '+' : ''}${fixed(c.delta)} ±${fixed(c.stderr)}`,
       c.verdict,
@@ -521,4 +590,5 @@ if (!handler) {
   cmdHelp();
   process.exit(2);
 }
+checkFlags(args);
 process.exit(handler(args));

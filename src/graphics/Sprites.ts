@@ -48,8 +48,10 @@ export function ballSprite(color: string, grouped: boolean): HTMLCanvasElement {
   x.beginPath(); x.arc(SPRITE / 2, SPRITE / 2, SP_R, 0, 6.2832);
   x.fillStyle = color; x.fill();
 
-  const normalizedColor = color.toLowerCase();
-  const isDark = normalizedColor === BLACK.toLowerCase() || normalizedColor === '#241c30' || normalizedColor === '#0d0914' || normalizedColor === '#0a0712' || normalizedColor === '#000000';
+  // Only the black special ball takes the dark treatment. This used to also test
+  // three colours that appear nowhere else in the code or the CSS, plus a second
+  // spelling of BLACK, so it always reduced to this.
+  const isDark = color.toLowerCase() === BLACK.toLowerCase();
 
   x.globalCompositeOperation = 'source-atop';
   const hi = x.createRadialGradient(SPRITE * 0.36, SPRITE * 0.31, 0, SPRITE * 0.36, SPRITE * 0.31, SP_R * 1.15);

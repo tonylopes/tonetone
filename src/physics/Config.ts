@@ -1,9 +1,9 @@
 export const PhysicsConfig = {
   R: 12,                  // ball radius
-  DRAG: 0.45,             // velocity kept per second
-  REST: 0.94,             // ball-on-ball bounce
-  REST_WALL: 0.75,        // rail bounce
-  KICK: 1,                // launch speed multiplier
+  DRAG: 0.59,             // velocity kept per second (knob `roll`)
+  REST: 1,                // ball-on-ball bounce (knob `bounce`)
+  REST_WALL: 0.8,         // rail bounce (knob `bounce` x 0.8)
+  KICK: 1.2,              // launch speed multiplier (knob `kick`)
   SPIN: 1,                // group rotation speed multiplier
   STOP: 2.5,              // speed below which a group parks
   MAX_BALLS: 900,         // safety cap

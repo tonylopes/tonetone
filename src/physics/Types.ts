@@ -58,6 +58,36 @@ export interface Group {
   _y1?: number;
 }
 
+/**
+ * How long a flash lives, in seconds, and how long a scoring pop lives.
+ *
+ * These sit with the types they age because three separate systems age them: the
+ * solver during a match, `main`'s results celebration, and the menu's own ambient
+ * effects. Each used to carry its own copy of 0.85 and 1.1 — `FLASH_LIFE` existed
+ * in `graphics/VisualFX` but the solver and `main` wrote the literal instead, so
+ * the drift was already live. Declaring them here also means physics does not have
+ * to import graphics to know them.
+ */
+export const FLASH_LIFE = 0.85;
+export const POP_LIFE = 1.1;
+
+/**
+ * A sound the frame owes the player, recorded in world terms.
+ *
+ * The solver used to call the voices itself, which meant physics could not be
+ * read or tested without the audio module loaded, and the stereo-pan and pitch
+ * formulas were repeated at every call site. It now records what happened and
+ * `audio/SoundEvents.playSoundEvents` turns that into sound once the frame's
+ * substeps are done. `x` is a world coordinate; nothing here is an audio
+ * parameter.
+ */
+export type SoundEvent =
+  | { type: 'boom'; x: number; kind: number; size: number; whiteBlack: boolean }
+  | { type: 'peel'; x: number; kind: number }
+  | { type: 'knock'; x: number; force: number; hitterKind: number; struckKind: number }
+  | { type: 'lock'; x: number; kind: number }
+  | { type: 'magnetLock'; x: number; size: number; bothBlack: boolean };
+
 export interface Flash {
   x: number;
   y: number;

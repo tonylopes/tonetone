@@ -137,7 +137,7 @@ describe('Voices module', () => {
       AudioStore.wetBus = null;
       AudioStore.thuds = 0;
       AudioStore.swooshAt = -9;
-      playThud('swoosh', xNorm, 0.8, true, true);
+      playThud(xNorm, 0.8, true, true);
       for (const call of (mockCtx.createStereoPanner as any).mock.results) {
         pans.push(call.value.pan.value);
       }
@@ -957,7 +957,7 @@ describe('Voices module', () => {
       AudioStore.thuds = 0;
       AudioStore.swooshAt = -9;
 
-      playThud('swoosh', 0, 0.8, true, true);
+      playThud(0, 0.8, true, true);
 
       // Two noise sources: the one driving the banks, and the onset scrape.
       expect(mockCtx.createBufferSource).toHaveBeenCalledTimes(2);

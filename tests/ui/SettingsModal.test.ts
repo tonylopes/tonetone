@@ -50,7 +50,7 @@ function mountPanel() {
   };
 
   const game = createGame();
-  setupSettingsKnobs(() => game, vi.fn(), () => 620);
+  setupSettingsKnobs(() => game, () => 620);
   return { els, game, pick: (label: string) => { els.get('preset')!.value = label; els.get('preset')!.fire('change'); } };
 }
 

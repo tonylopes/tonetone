@@ -1,7 +1,8 @@
-import { AudioStore, applyGain, initAudio as initGameAudio, isOptionsOpen } from '../audio/SynthEngine';
+import { AudioStore, BEAT, applyGain, initAudio as initGameAudio, isOptionsOpen } from '../audio/SynthEngine';
 import { playNote, playRandomGameBoom } from '../audio/Voices';
 import { Flash, Pop } from '../physics/Types';
-import { CURRENTS, FLASH_SPECS, FLASH_LIFE } from '../graphics/VisualFX';
+import { CURRENTS, FLASH_SPECS } from '../graphics/VisualFX';
+import { FLASH_LIFE, POP_LIFE } from '../physics/Types';
 import { ballSprite, clearSpriteCache, glowSprite } from '../graphics/Sprites';
 import { uiFont, logoFont } from '../graphics/Fonts';
 import { colorOfKind, randomKind, BLACK, WHITE } from '../game/Rules';
@@ -344,7 +345,7 @@ function updateAndDrawMenuPops() {
     pop.t += 0.016;
     pop.y += pop.vy;
 
-    const k = pop.t / 1.1;
+    const k = pop.t / POP_LIFE;
     if (k >= 1) {
       menuPops.splice(i, 1);
       continue;
@@ -547,7 +548,6 @@ export function playBinauralClick(
     }
 
     const baseVol = (clickType === 'hover' ? 0.06 : clickType === 'toggle' ? 0.22 : 0.30) * volBoost;
-    const BEAT_OFFSET = 5; // 5 Hz binaural beat offset between left/right channels
 
     const leftPanVal = Math.max(-1, Math.min(1, -0.85 + xNorm * 0.25));
     const rightPanVal = Math.max(-1, Math.min(1, 0.85 + xNorm * 0.25));
@@ -588,7 +588,7 @@ export function playBinauralClick(
     const leftOsc = actx.createOscillator();
     const leftGain = actx.createGain();
     nodesToClean.push(leftOsc, leftGain);
-    const leftFreq = targetFreq - BEAT_OFFSET / 2;
+    const leftFreq = targetFreq - BEAT / 2;
 
     leftOsc.type = 'sine';
     leftOsc.frequency.setValueAtTime(leftFreq, pTime);
@@ -618,7 +618,7 @@ export function playBinauralClick(
     const rightOsc = actx.createOscillator();
     const rightGain = actx.createGain();
     nodesToClean.push(rightOsc, rightGain);
-    const rightFreq = targetFreq + BEAT_OFFSET / 2;
+    const rightFreq = targetFreq + BEAT / 2;
 
     rightOsc.type = 'sine';
     rightOsc.frequency.setValueAtTime(rightFreq, pTime);
@@ -655,10 +655,6 @@ export function playBinauralClick(
   } catch (e) {
     activeMenuVoices = Math.max(0, activeMenuVoices - 1);
   }
-}
-
-function playHarmonicTone(freq: number, _type: OscillatorType = 'sine', duration = 0.15, vol = 0.12) {
-  playBinauralClick(freq, duration, 0, 'select', vol / 0.22);
 }
 
 function updateAudioBtnLabel() {

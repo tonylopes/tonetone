@@ -64,7 +64,11 @@ export function aimAt(p: LauncherPlayer, x: number, y: number, width: number, he
   p.strength = Math.max(0, Math.min(1, Math.hypot(dx, dy) / aimSpan(height, twoPlayer)));
 }
 
-export function throwSpeedOf(p: LauncherPlayer, twoPlayer?: boolean): number {
+// `_twoPlayer` is deliberately ignored: throw power is mode-independent so that a
+// single-player shot can still reach BOOM_SPEED. The parameter stays for call-site
+// symmetry with `aimSpan`/`setAim`, which do vary by mode, and
+// LauncherBays.test.ts pins speed1P === speed2P.
+export function throwSpeedOf(p: LauncherPlayer, _twoPlayer?: boolean): number {
   const t = Math.pow(Math.max(0, p.strength), PhysicsConfig.POWER_CURVE);
   return (
     (PhysicsConfig.THROW_MIN + t * (PhysicsConfig.THROW_MAX - PhysicsConfig.THROW_MIN)) *

@@ -2,7 +2,8 @@ import { Game, getRainBallAlpha } from '../game/GameState';
 import { PhysicsConfig, recalcThresholds } from '../physics/Config';
 import { uiFont } from './Fonts';
 import { ballSprite, inkOn, SP_R, SPRITE } from './Sprites';
-import { BG_SCALE, FLASH_LIFE, FLASH_SPECS, drawLiquid } from './VisualFX';
+import { BG_SCALE, FLASH_SPECS, drawLiquid } from './VisualFX';
+import { FLASH_LIFE, POP_LIFE } from '../physics/Types';
 import { aimDirOf, aimReachOf, launchPointOf, mouthRadius, throwSpeedOf } from '../physics/LauncherBays';
 import { LauncherPlayer } from '../physics/Types';
 import { kindLabel } from '../game/Rules';
@@ -211,7 +212,7 @@ export function drawPops(rc: RenderContext, game: Game) {
   ctx.textBaseline = 'middle';
   ctx.globalCompositeOperation = 'source-over';
   for (const f of game.pops) {
-    const k = f.t / 1.1;
+    const k = f.t / POP_LIFE;
     ctx.save();
     ctx.font = uiFont(800, (17 + 8 * (1 - k)).toFixed(1));
     // A pop is centred on the event that earned it, and now carries a word as
@@ -229,10 +230,6 @@ export function drawPops(rc: RenderContext, game: Game) {
     ctx.restore();
   }
   ctx.globalAlpha = 1;
-}
-
-export function drawScores(_rc: RenderContext, _game: Game) {
-  // Scores and match time are rendered in the HTML next-balls bar HUD elements
 }
 
 export function drawLaunchers(rc: RenderContext, game: Game, time: number) {
@@ -450,7 +447,7 @@ export function drawResultsCanvas(rc: RenderContext, game: Game) {
     ctx.textBaseline = 'middle';
     ctx.globalCompositeOperation = 'source-over';
     for (const f of game.pops) {
-      const k = f.t / 1.1;
+      const k = f.t / POP_LIFE;
       ctx.save();
       ctx.translate(f.x, f.y);
       if (game.twoPlayer && f.who === 1) ctx.rotate(Math.PI);
