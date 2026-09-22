@@ -14,7 +14,7 @@
 import { Game } from '../game/GameState';
 import { PhysicsConfig, chainPercent, recalcThresholds } from '../physics/Config';
 import { inertiaOf } from '../physics/RigidBody';
-import { COLORS, MAX_COLORS, MIN_COLORS, SHOT_DECAY, SPECIALS, colorOfKind, setColorsCount, setShotDecay, setSpecialsToggle } from '../game/Rules';
+import { COLORS, MAX_COLORS, MIN_COLORS, SHOT_DECAY, SPECIALS, WHITE_ODDS, colorOfKind, setColorsCount, setShotDecay, setSpecialsToggle, setWhiteOdds } from '../game/Rules';
 import { AudioStore, applyDrone, applyGain, setLatencyHint } from '../audio/SynthEngine';
 import { formatClock } from '../game/Clock';
 
@@ -85,6 +85,28 @@ const KNOB_SPECS = {
     apply: v => setSpecialsToggle(v > 0),
     format: v => (v > 0 ? 'on' : 'off'),
     read: () => (SPECIALS ? 1 : 0),
+  },
+
+  /**
+   * How often the player who is behind draws a white.
+   *
+   * The value is white's share of the one special slot a draw rolls, so the
+   * chance per draw is `white / (colours + 1)` — which is what `format` prints,
+   * because the share on its own says nothing about how often a white is seen.
+   * 0 turns white off without touching black; 1 gives it the whole slot, which
+   * is 25% per draw at three colours and 14.3% at six.
+   *
+   * The default is 0.75 rather than the 0.5 the rule shipped with, because at
+   * 0.5 one solo match in twelve produced no white at all. 1 is not the default:
+   * it is the only value that broke a geometric invariant in testing (0.505px
+   * of overlap against a 0.05px tolerance, 1 duel match in 60), and it buys no
+   * measurable drop in zero-white matches over 0.75.
+   */
+  white: {
+    group: 'game', kind: 'range', min: 0, max: 1, step: 0.05, default: 0.75,
+    apply: v => setWhiteOdds(v),
+    format: v => pct(v / (COLORS + 1)),
+    read: () => WHITE_ODDS,
   },
 
   colours: {
@@ -586,6 +608,7 @@ export interface ConfigSnapshot {
   physics: typeof PhysicsConfig;
   colors: number;
   specials: boolean;
+  whiteOdds: number;
   shotDecay: number;
   audio: { volume: number; lockVol: number; breakVol: number; boomVol: number; clickVol: number; drone: number; haptics: number; latency: number; boomCut: number };
 }
@@ -595,6 +618,7 @@ export function snapshotConfig(): ConfigSnapshot {
     physics: { ...PhysicsConfig },
     colors: COLORS,
     specials: SPECIALS,
+    whiteOdds: WHITE_ODDS,
     shotDecay: SHOT_DECAY,
     audio: {
       volume: AudioStore.volume, lockVol: AudioStore.lockVol, breakVol: AudioStore.breakVol,
@@ -608,6 +632,7 @@ export function restoreConfig(snap: ConfigSnapshot): void {
   Object.assign(PhysicsConfig, snap.physics);
   setColorsCount(snap.colors);
   setSpecialsToggle(snap.specials);
+  setWhiteOdds(snap.whiteOdds);
   setShotDecay(snap.shotDecay);
   Object.assign(AudioStore, snap.audio);
 }

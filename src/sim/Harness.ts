@@ -154,6 +154,18 @@ export interface RunResult {
    * a solo run reports 0.
    */
   leadChanges: number;
+  /**
+   * White balls drawn over the run, across both players.
+   *
+   * Only the player who is behind can draw one, so this is a property of the
+   * match as much as of the knob: a run that stayed level, or where a score sat
+   * at zero, offers fewer draws that are eligible at all.
+   */
+  whites: number;
+  /** Black balls drawn over the run, across both players. */
+  blacks: number;
+  /** Deck cards drawn over the run, across both players — the denominator. */
+  draws: number;
   groupAvg: number;
   groupMax: number;
   /** Worst invariant reading seen on any frame, and when. */
@@ -269,6 +281,16 @@ export function runSim(opts: SimOptions = {}): RunResult {
      * physics — the baseline is unmoved by the act of measuring it.
      */
     const shots = new Set<Shot>();
+    /**
+     * Deck cards already counted, per player.
+     *
+     * A draw is a fresh `BallOnDeck` object, and `loaded = nextUp` moves that
+     * same object down the deck, so identity is what separates a new draw from a
+     * card sliding forward. Counting here rather than inside `drawFor` keeps the
+     * measurement out of the shipping rules, the way `shots` does for chains.
+     */
+    const drawn: [Set<object>, Set<object>] = [new Set(), new Set()];
+    let whites = 0, blacks = 0;
     let halfTimeScores: [number, number] = [0, 0];
     let endedEarly = false;
     let frame = 0;
@@ -346,6 +368,17 @@ export function runSim(opts: SimOptions = {}): RunResult {
         halfTimeScores = [game.players[0].score, game.players[1].score];
       }
 
+      for (let i = 0; i < game.players.length && i < 2; i++) {
+        const p = game.players[i];
+        for (const slot of ['loaded', 'nextUp', 'then'] as const) {
+          const card = p[slot];
+          if (!card || drawn[i].has(card)) continue;
+          drawn[i].add(card);
+          if (card.special === 'white') whites++;
+          else if (card.special === 'black') blacks++;
+        }
+      }
+
       opts.onFrame?.(game, frame, t);
 
       if (game.matchOver) { endedEarly = true; frame++; break; }
@@ -392,6 +425,9 @@ export function runSim(opts: SimOptions = {}): RunResult {
       chainBest,
       chainLongFrac,
       leadChanges,
+      whites,
+      blacks,
+      draws: drawn[0].size + drawn[1].size,
       groupAvg: groupSum / Math.max(1, groupFrames),
       groupMax,
       worst,
@@ -477,6 +513,16 @@ export const EXTRACTORS: Record<string, Extractor> = {
    */
   catchUp: r => catchUp(r.halfTimeScores, r.finalScores),
   leadChanges: r => r.leadChanges,
+  /**
+   * Special balls. `whites` is the count over the run, so read it against the
+   * run length rather than as a per-match figure unless the run *is* a match.
+   * `noWhite` is 0 or 1 per run, which makes its mean across runs the share of
+   * matches that produced no white at all — the figure to drive to zero.
+   */
+  whites: r => r.whites,
+  blacks: r => r.blacks,
+  noWhite: r => (r.whites === 0 ? 1 : 0),
+  whiteFrac: r => (r.draws ? r.whites / r.draws : 0),
 };
 
 export function extractorNames(): string[] {

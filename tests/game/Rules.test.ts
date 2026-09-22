@@ -8,6 +8,8 @@ import {
   toneOfKind,
   kindLabel,
   drawFor,
+  WHITE_ODDS,
+  setWhiteOdds,
   PAY_LOCK,
   PAY_BOOM,
   PAY_PEEL,
@@ -186,6 +188,47 @@ describe('Rules module', () => {
       expect(blackProduced).toBeGreaterThan(0);
       expect(whiteProduced).toBeGreaterThan(0);
       expect(whiteProduced).toBeLessThan(blackProduced);
+    });
+
+    it('scales the trailing player\'s white rate with the white knob', () => {
+      setSpecialsToggle(true);
+      setColorsCount(3);
+      const was = WHITE_ODDS;
+      const leader: LauncherPlayer = { side: 1, score: 10 } as any;
+      const trailer: LauncherPlayer = { side: -1, score: 2 } as any;
+      const players = [leader, trailer];
+      const draws = 40000;
+
+      const rate = (odds: number) => {
+        setWhiteOdds(odds);
+        let white = 0;
+        for (let i = 0; i < draws; i++) {
+          if (drawFor(trailer, players, true).special === 'white') white++;
+        }
+        return white / draws;
+      };
+
+      try {
+        // Off means off: no white at all, and black is left alone.
+        expect(rate(0)).toBe(0);
+        setWhiteOdds(0);
+        let black = 0;
+        for (let i = 0; i < 2000; i++) {
+          if (drawFor(leader, players, true).special === 'black') black++;
+        }
+        expect(black).toBeGreaterThan(0);
+
+        // The chance per draw is odds / (COLORS + 1). This runs on the real
+        // Math.random, so the guard has to clear sampling noise outright: at
+        // 40k draws the standard error is about 0.2 points, and 1.5 points is
+        // seven of them. `toBeCloseTo(v, 2)` would allow only 0.5 points \u2014
+        // under three standard errors, which is a test that flakes.
+        for (const odds of [0.5, 0.75, 1]) {
+          expect(Math.abs(rate(odds) - odds / (COLORS + 1))).toBeLessThan(0.015);
+        }
+      } finally {
+        setWhiteOdds(was);
+      }
     });
 
     it('draws black for the leading player twice as often as any single colour', () => {

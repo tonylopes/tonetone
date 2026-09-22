@@ -27,6 +27,25 @@ export const PALETTES: Record<number, number[]> = {
 export let COLORS = 3;
 export let SPECIALS = true;
 
+/**
+ * White's share of the special-ball slot, for the player who is behind.
+ *
+ * A draw first rolls one slot against the colours (`1 / (COLORS + 1)`); this is
+ * the odds that the slot, once hit, actually yields a white rather than nothing.
+ * So the chance of drawing a white while behind is `WHITE_ODDS / (COLORS + 1)`
+ * — 18.8% per draw at the 0.75 default and three colours.
+ *
+ * 0.5 was the original hard-coded value (`1 / (2 * (COLORS + 1))`, 12.5%). It
+ * left 8.5% ±2.0% of solo matches with no white at all; 0.75 takes that to
+ * 2.5% ±1.1% and moves nothing else outside the noise. Measured over 200 solo
+ * matches per value — see the Scoring page in Notion, §9.
+ *
+ * Black is deliberately not symmetric: it takes two slots out of `COLORS + 2`
+ * for the player ahead, and is left alone here. The same §9 has why the
+ * assignment runs this way round.
+ */
+export let WHITE_ODDS = 0.75;
+
 // Scoring pays for what a shot changed, not for the size of whatever it touched.
 // See the Scoring page in Notion for the measurements behind these rules.
 
@@ -145,6 +164,10 @@ export function setSpecialsToggle(enabled: boolean) {
   SPECIALS = enabled;
 }
 
+export function setWhiteOdds(odds: number) {
+  WHITE_ODDS = Math.max(0, Math.min(1, odds));
+}
+
 export function colorOfKind(k: number): string {
   const set = PALETTES[COLORS] || PALETTES[MAX_COLORS];
   return BALL_COLORS[set[((k % set.length) + set.length) % set.length]];
@@ -167,7 +190,7 @@ export function kindLabel(k: number): string {
  * Note: Special balls (black/white) will NOT appear when players are at a draw in 2P mode (equal score, gap === 0) or when score is 0.
  * In solo mode, the player acts as winner and loser simultaneously once score > 0.
  * Black balls go to the player ahead, at twice the weight of any single colour.
- * White balls go to the player behind, at half the weight of any single colour.
+ * White balls go to the player behind, at a rate set by the `white` knob.
  * The reverse assignment snowballed matches: see the Scoring page in
  * Notion, §9 Special Balls and Catch-Up.
  */
@@ -192,10 +215,10 @@ export function drawFor(p?: LauncherPlayer, playersList?: LauncherPlayer[], twoP
 
     if (canSpawn) {
       // Black (player ahead, gap > 0) carries twice the weight of any single colour: 2 / (COLORS + 2).
-      // White (player behind, gap < 0) carries half the weight of a colour: 1 / (2 * (COLORS + 1)).
+      // White (player behind, gap < 0) takes WHITE_ODDS of one slot: WHITE_ODDS / (COLORS + 1).
       const special: SpecialBallType = gap > 0
         ? (Math.floor(Math.random() * (COLORS + 2)) >= COLORS ? 'black' : null)
-        : (Math.floor(Math.random() * (COLORS + 1)) === COLORS && Math.random() < 0.5 ? 'white' : null);
+        : (Math.floor(Math.random() * (COLORS + 1)) === COLORS && Math.random() < WHITE_ODDS ? 'white' : null);
       if (special) return { kind: -1, special, color: special === 'black' ? BLACK_HEX : WHITE_HEX };
     }
   }
